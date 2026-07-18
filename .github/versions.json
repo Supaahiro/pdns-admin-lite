@@ -1,0 +1,15 @@
+{
+  "_comment": [
+    "Single source of truth for toolchain versions used by CI/CD.",
+    "Consumed by the .github/actions/toolchain composite action.",
+    "'toolchain' holds the defaults. 'branchOverrides' lets a specific branch",
+    "pin a different version (e.g. trial a new Node on develop before master).",
+    "Override keys are EXACT branch names (the target branch on PRs, the pushed",
+    "branch on push). An override object is shallow-merged over 'toolchain'."
+  ],
+  "toolchain": {
+    "node": "24",
+    "python": "3.13"
+  },
+  "branchOverrides": {}
+}
