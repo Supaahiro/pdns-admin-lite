@@ -1,7 +1,11 @@
 # .github/workflows/pr-validate.yml
-# Version: 1.0.0 (2026-07-18)
+# Version: 1.1.0 (2026-07-18)
 #
 # Changelog:
+#   1.1.0 - New docker job: builds — without pushing — whichever image's
+#           Dockerfile the PR changes, reusing the release build's gha cache
+#           read-only. Closes the gap where a broken Dockerfile only surfaced
+#           at release time (pushes that don't publish build nothing).
 #   1.0.0 - Baseline: imported from schwifty-lab's pr-validate-pdns-admin-lite.yml
 #           (projects/pdns-admin-lite/{backend,frontend} paths collapsed to
 #           backend/ and frontend/ now that this project is its own repo) and
@@ -40,6 +44,8 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      docker_backend: ${{ steps.filter.outputs.docker_backend }}
+      docker_frontend: ${{ steps.filter.outputs.docker_frontend }}
     steps:
       - uses: actions/checkout@v7
 
@@ -57,6 +63,12 @@ jobs:
               - '.github/versions.json'
               - '.github/actions/toolchain/**'
               - '.github/workflows/pr-validate.yml'
+            docker_backend:
+              - 'backend/Dockerfile'
+              - 'backend/.dockerignore'
+            docker_frontend:
+              - 'frontend/Dockerfile'
+              - 'frontend/.dockerignore'
             yaml:
               - '**/*.yaml'
               - '**/*.yml'
@@ -135,3 +147,44 @@ jobs:
       - name: Type-check and build
         working-directory: frontend
         run: npm run build
+
+  # ── Docker build check ──────────────────────────────────────────────────────
+  # Builds (push: false) whichever image's Dockerfile the PR touches. Without
+  # this, a broken Dockerfile only surfaces at release time: pushes that don't
+  # publish build nothing. Reuses the release build's gha cache read-only
+  # (cache-from only, no cache-to), so PRs never pollute it; on a cache miss
+  # buildx just builds from scratch.
+  docker:
+    name: Docker — Build Check
+    needs: changes-and-lint
+    if: ${{ !cancelled() && (needs.changes-and-lint.outputs.docker_backend == 'true' || needs.changes-and-lint.outputs.docker_frontend == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build backend image
+        if: needs.changes-and-lint.outputs.docker_backend == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: false
+          build-args: |
+            BUILD_VERSION=0.0.0-pr.${{ github.event.pull_request.number }}
+            BUILD_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=backend
+
+      - name: Build frontend image
+        if: needs.changes-and-lint.outputs.docker_frontend == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: false
+          build-args: |
+            BUILD_VERSION=0.0.0-pr.${{ github.event.pull_request.number }}
+            BUILD_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=frontend

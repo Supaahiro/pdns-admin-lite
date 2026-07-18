@@ -7,6 +7,8 @@ Records (rrsets) can always be mutated, except the apex NS of a protected
 zone (see ensure_zone_mutable / the apex-NS check below).
 """
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from core.auth import require_auth
@@ -56,7 +58,14 @@ def _ensure_apex_ns_mutable(request: Request, zone_id: str, name: str, record_ty
 
 @router.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    # APP_VERSION is baked in at image build time; "dev" outside a release
+    # build. ENVIRONMENT is a plain container env var, read live so it can be
+    # overridden without a rebuild (see backend/Dockerfile).
+    return {
+        "status": "ok",
+        "version": os.environ.get("APP_VERSION", "dev"),
+        "environment": os.environ.get("ENVIRONMENT", "DEVELOPMENT"),
+    }
 
 
 @router.get("/zones", response_model=list[ZoneSummary])

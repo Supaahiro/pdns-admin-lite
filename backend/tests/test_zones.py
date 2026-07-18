@@ -34,7 +34,8 @@ def test_health_does_not_call_pdns(client, pdns_mock) -> None:
     """The health endpoint must succeed with zero upstream traffic."""
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    # version/environment default outside a release build (env vars unset).
+    assert response.json() == {"status": "ok", "version": "dev", "environment": "DEVELOPMENT"}
     assert not pdns_mock.calls
 
 

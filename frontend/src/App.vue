@@ -5,10 +5,22 @@ import { useAuth } from "./auth";
 
 const route = useRoute();
 const { user, isAuthenticated, login, logout } = useAuth();
+
+// Baked in at container build time (see ../Dockerfile); "0.0.0-dev.0"
+// outside one (e.g. `npm run dev`), matching the Dockerfile's own
+// BUILD_VERSION default.
+const appVersion = `v${import.meta.env.VITE_APP_VERSION || "0.0.0-dev.0"}`;
+
+// window.__ENV__ is populated at container *start* time (see
+// public/env.template.js + docker-entrypoint.d/), not at build time like
+// VITE_APP_VERSION above — this is what lets whoever runs the image override
+// ENVIRONMENT without rebuilding it.
+const isDev = (window.__ENV__?.ENVIRONMENT ?? "DEVELOPMENT").toUpperCase() !== "PRODUCTION";
 </script>
 
 <template>
   <header class="topbar">
+    <span v-if="isDev" class="env-badge" :title="appVersion">DEV</span>
     <RouterLink to="/" class="brand">pdns-admin-lite</RouterLink>
     <span class="tagline">PowerDNS record manager</span>
     <div v-if="isAuthenticated" class="auth-status">
@@ -24,7 +36,10 @@ const { user, isAuthenticated, login, logout } = useAuth();
   </main>
   <footer class="site-footer">
     <span class="footer-spacer" aria-hidden="true"></span>
-    <p class="footer-text">© 2026 🛸 schwifty-lab | Hiro’s Blog, All rights reserved.</p>
+    <p class="footer-text">
+      © 2026 🛸 schwifty-lab | Hiro’s Blog, All rights reserved.
+      <span class="app-version">{{ appVersion }}</span>
+    </p>
     <div class="footer-links">
       <a href="https://www.schwifty-lab.org" target="_blank" rel="noopener noreferrer" aria-label="schwifty-lab blog" title="Blog">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">

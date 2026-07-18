@@ -1,0 +1,90 @@
+# .github/workflows/release.yml
+# Version: 1.0.0 (2026-07-18)
+#
+# Changelog:
+#   1.0.0 - Baseline: push-triggered entry point (master / hotfix/* / develop,
+#           path-filtered); compute job gates publishing via
+#           compute-publish-condition.sh, then delegates to _build-and-release.
+#           Adapted from blog's release.yml: no dotnet/ng configuration
+#           outputs (this repo always builds production images), no
+#           assembly_semver/assembly_sem_file_ver (no .NET assembly to
+#           version) — see .github/actions/gitversion for the trimmed output
+#           set.
+
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - master
+      - hotfix/*
+      - develop
+    paths:
+      - "backend/**"
+      - "frontend/**"
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+concurrency:
+  # Per-branch group so a develop build never cancels a master/hotfix build.
+  group: build-${{ github.ref }}
+  # Only pre-release (develop) builds are cancel-in-progress; releases run to completion.
+  cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}
+
+jobs:
+  # ── Compute publish condition + version ─────────────────────────────────────
+  # Decide whether to publish and with what parameters, based on branch + the
+  # merge commit message, then calculate the version. Both need the same
+  # fetch-depth: 0 checkout, so they share this runner.
+  #
+  #   master        → publish (stable release)
+  #   hotfix/*      → publish (stable release)
+  #   develop       → publish only if the merge commit contains "[pre-release]"
+  #                   and HEAD does not already carry a stable release tag
+  compute:
+    name: Compute publish condition
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      publish: ${{ steps.eval.outputs.publish }}
+      is_prerelease: ${{ steps.eval.outputs.is_prerelease }}
+      semver: ${{ steps.gitversion.outputs.semver }}
+      sha_short: ${{ steps.gitversion.outputs.sha_short }}
+      owner: ${{ steps.gitversion.outputs.owner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate publish condition
+        id: eval
+        env:
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: bash .github/scripts/compute-publish-condition.sh
+
+      # Only worth computing when we are actually going to publish; the
+      # version outputs stay empty otherwise and nothing downstream runs.
+      - name: Calculate version
+        id: gitversion
+        if: steps.eval.outputs.publish == 'true'
+        uses: ./.github/actions/gitversion
+
+  # ── Build & release ─────────────────────────────────────────────────────────
+  build-and-release:
+    needs: compute
+    if: needs.compute.outputs.publish == 'true'
+    uses: ./.github/workflows/_build-and-release.yml
+    with:
+      is_prerelease: ${{ needs.compute.outputs.is_prerelease == 'true' }}
+      semver: ${{ needs.compute.outputs.semver }}
+      sha_short: ${{ needs.compute.outputs.sha_short }}
+      owner: ${{ needs.compute.outputs.owner }}
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+      id-token: write

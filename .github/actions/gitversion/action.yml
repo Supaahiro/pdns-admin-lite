@@ -1,0 +1,57 @@
+# .github/actions/gitversion/action.yml
+#
+# Purpose: Calculate semantic version using GitVersion, compute short SHA and
+#          lowercase owner. Pattern adopted from blog's gitversion action,
+#          trimmed to the outputs this repo uses — no assembly_semver /
+#          assembly_sem_file_ver, which only make sense for .NET's
+#          AssemblyVersion/FileVersion (this repo bakes BUILD_VERSION/
+#          BUILD_SHA straight into OCI labels + APP_VERSION/VITE_APP_VERSION
+#          instead, see backend/Dockerfile and frontend/Dockerfile).
+# Prerequisite: caller must check out with fetch-depth: 0 before invoking this action.
+# Inputs: none (reads GitVersion.yml from repo root)
+# Outputs: semver, sha_short, owner
+#
+# Design: always computes all outputs; consumers pick what they need. The
+# owner output is GHCR-specific — repos that don't push images ignore it.
+#
+# Version: 1.0.0 (2026-07-18)
+#
+# Changelog:
+#   1.0.0 - Baseline: GitVersion execution + short SHA + lowercase owner,
+#           adapted from blog's gitversion action (assembly outputs dropped).
+
+name: Calculate Version (GitVersion)
+description: >
+  Runs GitVersion to produce a SemVer string, computes the short commit SHA,
+  and lowercases the repository owner for GHCR tagging. Requires full git
+  history — caller must use actions/checkout with fetch-depth: 0.
+
+outputs:
+  semver:
+    description: "Full SemVer string (e.g. 1.3.0-dev.5)"
+    value: ${{ steps.gitversion.outputs.semVer }}
+  sha_short:
+    description: "Short (7-char) commit SHA"
+    value: ${{ steps.sha.outputs.short }}
+  owner:
+    description: "Lowercase GitHub repository owner (for GHCR image paths)"
+    value: ${{ steps.owner.outputs.lowercase }}
+
+runs:
+  using: composite
+  steps:
+    - uses: gittools/actions/gitversion/setup@v4
+      with:
+        versionSpec: "6.x"
+
+    - id: gitversion
+      uses: gittools/actions/gitversion/execute@v4
+
+    - id: sha
+      shell: bash
+      run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - id: owner
+      shell: bash
+      run: |
+        echo "lowercase=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT

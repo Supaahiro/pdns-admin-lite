@@ -34,6 +34,21 @@ body {
   text-decoration: none;
 }
 
+/* Mirrors blog's app-env-badge component styling. */
+.env-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background-color: #f59e0b;
+  color: #1c1917;
+  text-transform: uppercase;
+  line-height: 1.5;
+  user-select: none;
+}
+
 .tagline {
   color: #9fb3c8;
   font-size: 0.85rem;
@@ -75,6 +90,11 @@ body {
   margin: 0;
   text-align: center;
   white-space: nowrap;
+}
+
+.app-version {
+  margin-left: 0.4rem;
+  opacity: 0.6;
 }
 
 .footer-links {

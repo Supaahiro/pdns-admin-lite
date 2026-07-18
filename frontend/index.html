@@ -7,6 +7,12 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Populated at container start time (see docker-entrypoint.d/); this
+         classic script runs before the deferred module script below, so
+         window.__ENV__ is always set by the time App.vue reads it. Missing
+         in `npm run dev` (no nginx entrypoint) — App.vue defaults to
+         DEVELOPMENT when window.__ENV__ is absent. -->
+    <script src="/env.js"></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

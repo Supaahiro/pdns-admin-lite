@@ -1,0 +1,178 @@
+# .github/workflows/_build-and-release.yml
+# Version: 1.0.0 (2026-07-18)
+#
+# Changelog:
+#   1.0.0 - Baseline: reusable build-and-release — backend + frontend Docker
+#           images to GHCR (version baked via BUILD_VERSION/BUILD_SHA/
+#           BUILD_DATE build-args, see backend/Dockerfile and
+#           frontend/Dockerfile), GitHub Release on stable. Adapted from
+#           blog's _build-and-release.yml: no CLI image (nothing to publish
+#           besides the two app images), so both docker jobs use `type=gha`
+#           cache instead of blog's `type=registry` GHCR buildcache — that
+#           choice existed in blog only to let its backend and CLI images
+#           share layers across builds, which doesn't apply here. No
+#           prune-ghcr job follows for the same reason: gha cache doesn't
+#           leave orphaned GHCR package versions behind. No e2e job — this
+#           repo has no Playwright/smoke-test suite yet (see .github/CLAUDE.md).
+
+name: _build-and-release
+
+on:
+  workflow_call:
+    inputs:
+      is_prerelease:
+        description: "true for develop pre-releases, false for master/hotfix releases"
+        required: true
+        type: boolean
+      semver:
+        description: "Full SemVer (e.g. 1.3.0-dev.5), from the gitversion action"
+        required: true
+        type: string
+      sha_short:
+        description: "Short commit SHA"
+        required: true
+        type: string
+      owner:
+        description: "Lowercase repo owner for GHCR image paths"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  # ── Docker: Backend ──────────────────────────────────────────────────────────
+  docker-backend:
+    name: Docker — Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE: ghcr.io/${{ inputs.owner }}/pdns-admin-lite-backend
+      VERSION: ${{ inputs.semver }}
+      SHA: ${{ inputs.sha_short }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Compute Docker tags
+        id: tags
+        run: |
+          echo "tags=$(.github/scripts/compute-docker-tags.sh \
+            "${{ env.IMAGE }}" "${{ env.VERSION }}" "${{ inputs.is_prerelease }}")" >> $GITHUB_OUTPUT
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            BUILD_VERSION=${{ env.VERSION }}
+            BUILD_SHA=${{ env.SHA }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+  # ── Docker: Frontend ─────────────────────────────────────────────────────────
+  docker-frontend:
+    name: Docker — Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE: ghcr.io/${{ inputs.owner }}/pdns-admin-lite-frontend
+      VERSION: ${{ inputs.semver }}
+      SHA: ${{ inputs.sha_short }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Compute Docker tags
+        id: tags
+        run: |
+          echo "tags=$(.github/scripts/compute-docker-tags.sh \
+            "${{ env.IMAGE }}" "${{ env.VERSION }}" "${{ inputs.is_prerelease }}")" >> $GITHUB_OUTPUT
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            BUILD_VERSION=${{ env.VERSION }}
+            BUILD_SHA=${{ env.SHA }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  # ── Release ───────────────────────────────────────────────────────────────────
+  # Release assets are the source archive + checksums only: the deployable
+  # artifacts are the GHCR images above.
+  release:
+    name: ${{ inputs.is_prerelease && 'Pre-release' || 'Release' }}
+    needs:
+      - docker-backend
+      - docker-frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ inputs.semver }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create source archive
+        run: |
+          mkdir -p release-assets
+          git archive \
+            --format=zip \
+            --prefix="pdns-admin-lite-${{ env.VERSION }}/" \
+            HEAD \
+            -o "release-assets/pdns-admin-lite-source-${{ env.VERSION }}.zip"
+
+      - name: Generate checksums
+        working-directory: release-assets
+        run: sha256sum *.zip > SHA256SUMS.txt
+
+      - name: Compute release params
+        id: params
+        run: |
+          if [ "${{ inputs.is_prerelease }}" = "true" ]; then
+            echo "name=Pre-release ${{ env.VERSION }}" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+          else
+            echo "name=Release ${{ env.VERSION }}" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: ${{ steps.params.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: ${{ steps.params.outputs.prerelease }}
+          make_latest: ${{ steps.params.outputs.make_latest }}
+          files: |
+            release-assets/*.zip
+            release-assets/SHA256SUMS.txt
