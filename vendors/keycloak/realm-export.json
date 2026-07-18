@@ -1,0 +1,71 @@
+{
+  "realm": "pdns-admin-lite",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "requiredActions": [
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 90,
+      "config": {}
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "dns-admin",
+        "description": "Reserved for future authorization; the backend currently checks authentication only."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "pdns-admin-lite-spa",
+      "name": "pdns-admin-lite",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${PUBLIC_ORIGIN}/*"],
+      "webOrigins": ["${PUBLIC_ORIGIN}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${PUBLIC_ORIGIN}/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "pdns-admin-lite-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "pdns-admin-lite-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+# Dev stack for pdns-admin-lite: Caddy edge (only published port) in front of
+# the static frontend and the FastAPI backend, plus a disposable demo PowerDNS
+# seeded with an example.test. zone, plus a dev-mode Keycloak for auth.
+#
+# To target a real PowerDNS instead of the demo one, set PDNS_API_URL and
+# PDNS_API_KEY in .env and start only the app services (auth is part of the
+# app now, so keycloak stays):
+#   docker compose up --build --no-deps edge frontend backend keycloak
+services:
+  edge:
+    image: caddy:2-alpine
+    ports:
+      - "${EDGE_PORT:-8080}:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+      pdns-seed:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  backend:
+    build: ./backend
+    environment:
+      PDNS_API_URL: "${PDNS_API_URL:-http://pdns:8081/api/v1}"
+      PDNS_API_KEY: "${PDNS_API_KEY:-changeme-dev-key}"
+      OIDC_ISSUER: "${OIDC_ISSUER:-${PUBLIC_ORIGIN:-http://localhost:8080}/auth/realms/pdns-admin-lite}"
+      OIDC_JWKS_URL: "${OIDC_JWKS_URL:-http://keycloak:8080/auth/realms/pdns-admin-lite/protocol/openid-connect/certs}"
+      OIDC_AUDIENCE: "${OIDC_AUDIENCE:-pdns-admin-lite-api}"
+      PROTECTED_ZONES: "${PROTECTED_ZONES:-example.test.}"
+      DEFAULT_NS: "${DEFAULT_NS:-ns1.example.test.}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      pdns:
+        condition: service_healthy
+
+  # Demo PowerDNS: SQLite backend baked into the image, no volume on purpose —
+  # every `up` starts clean and pdns-seed makes the state deterministic.
+  pdns:
+    image: powerdns/pdns-auth-48:4.8.3
+    # PDNS_AUTH_API_KEY alone makes the image enable api+webserver on
+    # 0.0.0.0 (allow-from 0.0.0.0/0); everything else goes as CLI flags.
+    environment:
+      PDNS_AUTH_API_KEY: "${PDNS_API_KEY:-changeme-dev-key}"
+    command:
+      - "--default-soa-content=ns1.@ hostmaster.@ 0 10800 3600 604800 3600"
+    healthcheck:
+      test: ["CMD", "pdns_control", "rping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  pdns-seed:
+    image: curlimages/curl:8.11.1
+    entrypoint: ["sh", "/seed.sh"]
+    environment:
+      PDNS_API_URL: "http://pdns:8081/api/v1"
+      PDNS_API_KEY: "${PDNS_API_KEY:-changeme-dev-key}"
+    volumes:
+      - ./vendors/pdns/seed.sh:/seed.sh:ro
+    depends_on:
+      pdns:
+        condition: service_healthy
+    restart: "no"
+
+  # Dev-mode identity provider (H2, no TLS — see README "Before trusting this
+  # on your LAN"). Routed behind Caddy at /auth/* so the browser-visible
+  # issuer shares the single published port; the admin console is blocked at
+  # the edge (see Caddyfile), so admin operations go through
+  # `docker compose exec keycloak /opt/keycloak/bin/kcadm.sh`.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KC_ADMIN_USER:-admin}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KC_ADMIN_PASSWORD:-changeme-dev-admin}"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: "${PUBLIC_ORIGIN:-http://localhost:8080}/auth"
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      # Consumed by ${...} placeholders inside realm-export.json at import time.
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:8080}"
+      DEMO_PASSWORD: "${DEMO_PASSWORD:-demo}"
+    volumes:
+      - ./vendors/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      # The image has no curl; probe the management port (9000) via bash /dev/tcp.
+      # The management interface inherits KC_HTTP_RELATIVE_PATH, so the ready
+      # probe is /auth/health/ready here, not /health/ready.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q '200 OK' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 18

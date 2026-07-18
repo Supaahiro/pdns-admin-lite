@@ -1,41 +1,19 @@
-# from vue/.gitignore
-.DS_Store
-node_modules
-explorations
-TODOs.md
-RELEASE_NOTE*.md
-packages/server-renderer/basic.js
-packages/server-renderer/build.dev.js
-packages/server-renderer/build.prod.js
-packages/server-renderer/server-plugin.js
-packages/server-renderer/client-plugin.js
-packages/template-compiler/build.js
-packages/template-compiler/browser.js
-dist
-temp
-types/v3-generated.d.ts
+# Env files (never commit real secrets/keys — .env.example is the template)
+**/.env
 
-# from react/.gitignore
-*~
-*.pyc
-.grunt
-_SpecRunner.html
-__benchmarks__
-build/
-remote-repo/
-coverage/
-.module-cache
-*.log*
-chrome-user-data
-*.sublime-project
-*.sublime-workspace
-.idea
-*.iml
+# Python (backend)
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+
+# Node (frontend)
+**/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
+
+# Editors / OS
+**/.idea
 .vscode
-.zed
-*.swp
-*.swo
-/tmp
-/.worktrees
-.claude/*.local.*
-.claude/worktrees
+.DS_Store
+.claude/settings.local.json
