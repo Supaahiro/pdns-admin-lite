@@ -1,0 +1,129 @@
+# GitVersion.yml — semantic version calculation for this repo's GitFlow.
+# Mode: ContinuousDeployment (every commit gets a distinct version).
+#
+# Design notes — the non-obvious decisions, all verified empirically against the
+# real dotnet-gitversion CLI via utils/gitflow_version_simulator.py:
+#
+#   - commit-message-incrementing: Disabled — the bump comes from the branch type
+#     below, never from a '+semver:' token in a commit message.
+#
+#   - increment per branch follows Conventional Commits: feat/release → Minor,
+#     fix/perf/hotfix → Patch, refactor/docs/style/test/ci/chore → None (no release
+#     semantics). A branch's increment governs its OWN commits only — it is NOT
+#     inherited by the branch it merges into. develop always wins with its own
+#     Minor (even a fix-only merge yields x.(y+1).0-dev.N); master falls back to
+#     its own Patch. The Minor bump visible on a release actually comes from the
+#     vX.Y.0-dev.N pre-release tags CI publishes on develop, which GitVersion
+#     adopts as the base version after the release merge.
+#
+#   - develop.track-merge-target: false — it would only fire on a real merge
+#     commit whose other parent is a source-branch (master). This repo never
+#     merges hotfix/* into develop (gitflow Inviolable Rule 2); the fix is always
+#     cherry-picked, and a cherry-pick carries no merge ancestry to track, so the
+#     setting is inert on the very path it would supposedly help.
+#
+#   - prevent-increment.of-merged-branch is intentionally NOT set: it only acts on
+#     a merge of a branch whose name/message encodes a version (e.g. release/X.Y.Z).
+#     Nothing merged into develop does, so it was a verified no-op — dropped rather
+#     than kept as dead config.
+#
+#   - chore/* and hotfix/* are the only branches sourced from master; every other
+#     topic branches from develop. chore bypasses the release cycle (gitflow Flow 5).
+#
+# Version: 1.1.0 (2026-07-18)
+#
+# Changelog:
+#   1.1.0 (2026-07-18) - Add the ci/* branch type (increment None, sourced from
+#       develop) so CI/build-tooling changes get a first-class no-bump branch
+#       instead of falling through to GitVersion's unknown-branch fallback.
+#   1.0.0 (2026-07-13) - Add version tracking (matching utils/ + .claude/skills).
+#       Baseline documents the config as it now stands, folding in three recent
+#       decisions and consolidating their former inline rationale into the notes
+#       above: hotfix increment Patch (was None), develop track-merge-target false
+#       (cherry-pick propagation has no merge ancestry), and removal of the
+#       prevent-increment.of-merged-branch overrides on master/develop (no-ops for
+#       this repo's merges).
+
+mode: ContinuousDeployment
+
+commit-message-incrementing: Disabled
+
+branches:
+  master:
+    regex: ^master$
+    label: ""
+    increment: Patch
+    is-main-branch: true
+
+  develop:
+    regex: ^develop$
+    label: dev
+    increment: Minor
+    track-merge-target: false
+    source-branches: [master]
+
+  feature:
+    regex: ^feat(ure)?/
+    label: feat
+    increment: Minor
+    source-branches: [develop]
+
+  fix:
+    regex: ^fix/
+    label: fix
+    increment: Patch
+    source-branches: [develop]
+
+  perf:
+    regex: ^perf/
+    label: perf
+    increment: Patch
+    source-branches: [develop]
+
+  refactor:
+    regex: ^refactor/
+    label: refactor
+    increment: None
+    source-branches: [develop]
+
+  docs:
+    regex: ^docs/
+    label: docs
+    increment: None
+    source-branches: [develop]
+
+  style:
+    regex: ^style/
+    label: style
+    increment: None
+    source-branches: [develop]
+
+  test:
+    regex: ^test/
+    label: test
+    increment: None
+    source-branches: [develop]
+
+  ci:
+    regex: ^ci/
+    label: ci
+    increment: None
+    source-branches: [develop]
+
+  release:
+    regex: ^release/
+    label: rc
+    increment: Minor
+    source-branches: [develop]
+
+  hotfix:
+    regex: ^hotfix/
+    label: hotfix
+    increment: Patch
+    source-branches: [master]
+
+  chore:
+    regex: ^chore/
+    label: chore
+    increment: None
+    source-branches: [master]

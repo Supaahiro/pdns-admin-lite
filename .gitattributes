@@ -1,0 +1,19 @@
+# Enforce LF in the repository and working tree for all text files.
+# Overrides per-user core.autocrlf so line endings stay consistent on every
+# machine and on Linux CI runners (bash scripts must be LF or they break).
+* text=auto eol=lf
+
+# Windows-only script types keep CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Backend .NET sources/tooling files keep CRLF, matching backend/.editorconfig's
+# end_of_line=crlf (Visual Studio/Rider default on Windows, where this solution is authored).
+*.cs text eol=crlf
+*.csproj text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+*.proj text eol=crlf
+*.sln text eol=crlf
+*.slnx text eol=crlf
