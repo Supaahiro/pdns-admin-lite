@@ -6,6 +6,8 @@
 # PDNS_API_KEY in .env and start only the app services (auth is part of the
 # app now, so keycloak stays):
 #   docker compose up --build --no-deps edge frontend backend keycloak
+name: pdns-admin-lite
+
 services:
   edge:
     image: caddy:2-alpine
