@@ -1,7 +1,11 @@
 # frontend/Dockerfile
-# Version: 1.2.0 (2026-07-18)
+# Version: 1.2.1 (2026-07-19)
 #
 # Changelog:
+#   1.2.1 - No functional change. Touches this file only so frontend/ falls
+#           inside release.yml's paths filter (backend/**, frontend/**) for
+#           the release/0.1.0 → master cut, since the actual fix on this
+#           release (ci/fix-script-executable-bit) only touched .github/.
 #   1.2.0 - Add runtime-overridable ENVIRONMENT (default DEVELOPMENT): unlike
 #           BUILD_VERSION below, this is NOT baked at build time — Vite env
 #           vars can't be changed post-build, but whoever runs this image
