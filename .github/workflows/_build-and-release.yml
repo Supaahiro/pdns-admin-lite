@@ -1,7 +1,16 @@
 # .github/workflows/_build-and-release.yml
-# Version: 1.0.0 (2026-07-18)
+# Version: 1.0.1 (2026-07-18)
 #
 # Changelog:
+#   1.0.1 - Invoke compute-docker-tags.sh via `bash` instead of direct
+#           execution: the first real push hit "Permission denied" because
+#           the script lost its executable bit (authored on Windows, no
+#           native x bit), which silently produced an empty tags output and
+#           failed buildx with "tag is needed when pushing to registry".
+#           `bash script.sh` doesn't depend on the tracked file mode at all,
+#           so this can't recur regardless of what OS a script is next
+#           edited on — same style compute-publish-condition.sh already
+#           uses in release.yml.
 #   1.0.0 - Baseline: reusable build-and-release — backend + frontend Docker
 #           images to GHCR (version baked via BUILD_VERSION/BUILD_SHA/
 #           BUILD_DATE build-args, see backend/Dockerfile and
@@ -66,7 +75,7 @@ jobs:
       - name: Compute Docker tags
         id: tags
         run: |
-          echo "tags=$(.github/scripts/compute-docker-tags.sh \
+          echo "tags=$(bash .github/scripts/compute-docker-tags.sh \
             "${{ env.IMAGE }}" "${{ env.VERSION }}" "${{ inputs.is_prerelease }}")" >> $GITHUB_OUTPUT
 
       - name: Build & push backend image
@@ -106,7 +115,7 @@ jobs:
       - name: Compute Docker tags
         id: tags
         run: |
-          echo "tags=$(.github/scripts/compute-docker-tags.sh \
+          echo "tags=$(bash .github/scripts/compute-docker-tags.sh \
             "${{ env.IMAGE }}" "${{ env.VERSION }}" "${{ inputs.is_prerelease }}")" >> $GITHUB_OUTPUT
 
       - name: Build & push frontend image
