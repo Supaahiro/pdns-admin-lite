@@ -1,7 +1,13 @@
 # .github/workflows/_build-and-release.yml
-# Version: 1.0.1 (2026-07-18)
+# Version: 1.1.0 (2026-07-19)
 #
 # Changelog:
+#   1.1.0 - BUILD_DATE build-arg now derives from the checked-out HEAD commit
+#           (git log -1 --format=%cI) instead of
+#           github.event.head_commit.timestamp, which is empty on
+#           workflow_dispatch runs (release-trigger redesign: hotfix and
+#           pre-release builds are dispatch-triggered). Mirrors blog's
+#           _build-and-release.yml 2.2.0.
 #   1.0.1 - Invoke compute-docker-tags.sh via `bash` instead of direct
 #           execution: the first real push hit "Permission denied" because
 #           the script lost its executable bit (authored on Windows, no
@@ -72,11 +78,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Compute Docker tags
+      - name: Compute Docker tags and build date
         id: tags
         run: |
           echo "tags=$(bash .github/scripts/compute-docker-tags.sh \
             "${{ env.IMAGE }}" "${{ env.VERSION }}" "${{ inputs.is_prerelease }}")" >> $GITHUB_OUTPUT
+          echo "build_date=$(git log -1 --format=%cI)" >> $GITHUB_OUTPUT
 
       - name: Build & push backend image
         uses: docker/build-push-action@v7
@@ -88,7 +95,7 @@ jobs:
           build-args: |
             BUILD_VERSION=${{ env.VERSION }}
             BUILD_SHA=${{ env.SHA }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ steps.tags.outputs.build_date }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -112,11 +119,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Compute Docker tags
+      - name: Compute Docker tags and build date
         id: tags
         run: |
           echo "tags=$(bash .github/scripts/compute-docker-tags.sh \
             "${{ env.IMAGE }}" "${{ env.VERSION }}" "${{ inputs.is_prerelease }}")" >> $GITHUB_OUTPUT
+          echo "build_date=$(git log -1 --format=%cI)" >> $GITHUB_OUTPUT
 
       - name: Build & push frontend image
         uses: docker/build-push-action@v7
@@ -128,7 +136,7 @@ jobs:
           build-args: |
             BUILD_VERSION=${{ env.VERSION }}
             BUILD_SHA=${{ env.SHA }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ steps.tags.outputs.build_date }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 

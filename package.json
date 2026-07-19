@@ -1,0 +1,25 @@
+{
+  "name": "pdns-admin-lite",
+  "version": "1.0.0",
+  "description": "A minimal web UI for managing DNS records on a PowerDNS Authoritative server",
+  "private": true,
+  "scripts": {
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Supaahiro/pdns-admin-lite.git"
+  },
+  "author": "",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Supaahiro/pdns-admin-lite/issues"
+  },
+  "homepage": "https://github.com/Supaahiro/pdns-admin-lite#readme",
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "husky": "^9.1.7"
+  }
+}

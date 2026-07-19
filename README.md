@@ -54,7 +54,7 @@ from different places, but tokens only ever carry the browser-visible one.
 | `backend/` | FastAPI app (Poetry, Python 3.13): `core/pdns.py` PowerDNS client, `api/routes.py` endpoints, `tests/` — see [backend/CONVENTIONS.md](backend/CONVENTIONS.md) |
 | `frontend/` | Vue 3 + Vite + TypeScript SPA, multi-stage Dockerfile ending in `nginx:alpine` — see [frontend/CONVENTIONS.md](frontend/CONVENTIONS.md) |
 | `vendors/pdns/seed.sh` | One-shot seeder creating the demo `example.test.` zone through the same API calls Ansible uses |
-| `vendors/keycloak/realm-export.json` | Checked-in realm (`pdns-admin-lite` realm, `pdns-admin-lite-spa` public PKCE client, `demo` user), imported at startup via `--import-realm` |
+| `vendors/keycloak/realm-export.json` | Checked-in realm (`pdns-admin-lite` realm, `pdns-admin-lite-spa` public PKCE client, one user from `PDNS_ADMIN_LITE_USER`/`PDNS_ADMIN_LITE_PASSWORD`), imported at startup via `--import-realm` |
 | `docker-compose.yml` | Dev stack: `edge`, `frontend`, `backend`, `pdns`, `pdns-seed`, `keycloak` |
 | `Caddyfile` | Edge routing: `/api/*` → backend, `/auth/admin/*` → 403, `/auth/*` → keycloak, everything else → frontend |
 
@@ -62,7 +62,7 @@ from different places, but tokens only ever carry the browser-visible one.
 
 The compose stack runs Keycloak in `start-dev` mode (H2, no TLS — a POC convenience, not a
 production posture) behind Caddy at `/auth/*`, with the demo login `demo` / `demo`
-(`DEMO_PASSWORD` in `.env`). The Keycloak **admin console and admin REST API are not reachable
+(`PDNS_ADMIN_LITE_USER` / `PDNS_ADMIN_LITE_PASSWORD` in `.env`). The Keycloak **admin console and admin REST API are not reachable
 through the edge** — `/auth/admin/*` returns 403 there by design. Admin operations against the
 dev Keycloak go through its own CLI instead:
 
@@ -81,8 +81,8 @@ PUBLIC_ORIGIN=http://<host-ip>:8080
 
 This feeds Keycloak's hostname, the realm's redirect URIs, and the issuer the backend asserts,
 so login and token validation keep working from any machine that can reach that origin.
-Changing `PUBLIC_ORIGIN` (or `DEMO_PASSWORD`) after the first `up` requires recreating the
-container so the realm re-imports with the new placeholder values:
+Changing `PUBLIC_ORIGIN` (or `PDNS_ADMIN_LITE_USER`/`PDNS_ADMIN_LITE_PASSWORD`) after the first
+`up` requires recreating the container so the realm re-imports with the new placeholder values:
 
 ```bash
 docker compose up --force-recreate keycloak
@@ -103,12 +103,29 @@ without a token gets `401`.
 
 > **Before trusting this on your LAN:** with the checked-in `demo`/`demo` credentials and
 > default `KC_ADMIN_PASSWORD`, any LAN user who can reach `:8080` can log in and mutate DNS
-> records. Rotate `DEMO_PASSWORD` and `KC_ADMIN_PASSWORD` in `.env` before relying on this
-> beyond a local demo, and set `PROTECTED_ZONES` to the zone(s) that actually matter. What the
+> records. Rotate `PDNS_ADMIN_LITE_PASSWORD` and `KC_ADMIN_PASSWORD` in `.env` before relying on
+> this beyond a local demo, and set `PROTECTED_ZONES` to the zone(s) that actually matter. What the
 > defaults still guarantee regardless of credentials: there is no admin-console side door
 > (blocked at the edge, not just hidden), and the zones named in `PROTECTED_ZONES` — plus any of
 > their subzones — cannot be deleted or shadowed by any authenticated user, including one who
 > has correctly guessed the demo password.
+
+### Using an external Keycloak (optional)
+
+`docker-compose.yml` always bundles its own dev-mode Keycloak. To point at one you already run
+elsewhere instead — no rebuild needed:
+
+- **Frontend**: set `OIDC_AUTHORITY` (absolute URL, e.g. `https://keycloak.example.org/realms/<realm>`)
+  and `OIDC_CLIENT_ID` as env vars on the `frontend` service — resolved into `window.__ENV__` at
+  container *start* time (`frontend/src/oidcSettings.ts`), the same mechanism already used for
+  `ENVIRONMENT`. Unset keeps today's default (relative, same-origin bundled Keycloak).
+- **Backend**: set `OIDC_ISSUER` / `OIDC_JWKS_URL` / `OIDC_AUDIENCE` to match the external realm —
+  already plain runtime env vars, same as for the bundled Keycloak.
+- On the external Keycloak, provision a public PKCE client (Standard flow, no client secret, PKCE
+  S256) with redirect URIs/web origins covering your SPA's origin, plus an audience mapper
+  matching `OIDC_AUDIENCE`.
+- Skip the bundled `keycloak` service and its edge routing — the SPA talks to the external origin
+  directly, a normal cross-origin OAuth redirect.
 
 ## Prerequisites
 
@@ -119,7 +136,7 @@ without a token gets `401`.
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up --build --wait
 ```
 
 Then open <http://localhost:8080> — the demo `example.test.` zone is already seeded, and you can log in with `demo` / `demo`.
@@ -167,7 +184,7 @@ All settings come from environment variables (see `.env.example`):
 | `PROTECTED_ZONES` | `example.test.` | Comma-separated; these zones and their subzones can never be deleted or created-over, regardless of who is authenticated |
 | `DEFAULT_NS` | `ns1.example.test.` | NS content for zones created through the UI |
 | `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `changeme-dev-admin` | Keycloak bootstrap admin (console not routed through the edge; use `kcadm.sh`, see above) |
-| `DEMO_PASSWORD` | `demo` | Password for the `demo` login |
+| `PDNS_ADMIN_LITE_USER` / `PDNS_ADMIN_LITE_PASSWORD` | `demo` / `demo` | Username/password for the demo login |
 | `OIDC_ISSUER` / `OIDC_JWKS_URL` / `OIDC_AUDIENCE` | derived from `PUBLIC_ORIGIN` | Token validation settings the backend enforces on record mutations |
 
 ### Pointing at a real PowerDNS
@@ -186,7 +203,7 @@ docker compose up --build --no-deps edge frontend backend keycloak
 ```
 
 Before pointing this at a zone you actually care about, work through the **"Before trusting this
-on your LAN"** checklist above: rotate `DEMO_PASSWORD` and `KC_ADMIN_PASSWORD`, and set
+on your LAN"** checklist above: rotate `PDNS_ADMIN_LITE_PASSWORD` and `KC_ADMIN_PASSWORD`, and set
 `PROTECTED_ZONES` to the real zone(s) this server is authoritative for — the demo default
 (`example.test.`) protects nothing on your actual DNS.
 

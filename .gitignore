@@ -16,4 +16,10 @@ frontend/*.tsbuildinfo
 **/.idea
 .vscode
 .DS_Store
-.claude/settings.local.json
+.claude/
+
+# Local scratch stacks (e.g. external-Keycloak testing) — throwaway, not for the repo
+playgrounds/
+
+# Working notes, not for the repo
+TODO.md

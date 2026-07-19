@@ -56,13 +56,13 @@
   ],
   "users": [
     {
-      "username": "demo",
+      "username": "${PDNS_ADMIN_LITE_USER}",
       "enabled": true,
       "emailVerified": true,
       "credentials": [
         {
           "type": "password",
-          "value": "${DEMO_PASSWORD}",
+          "value": "${PDNS_ADMIN_LITE_PASSWORD}",
           "temporary": false
         }
       ]
