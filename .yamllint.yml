@@ -1,5 +1,5 @@
 ---
-# yamllint configuration for blog
+# yamllint configuration for pdns-admin-lite
 
 extends: default
 
@@ -23,6 +23,6 @@ rules:
 
 ignore: |
   .git/
-  node_modules/
-  site/
-  scaffolding/
+  **/node_modules/
+  **/.venv/
+  **/.pytest_cache/
