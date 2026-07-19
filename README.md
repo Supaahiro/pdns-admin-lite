@@ -119,7 +119,7 @@ without a token gets `401`.
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up --build --wait
 ```
 
 Then open <http://localhost:8080> — the demo `example.test.` zone is already seeded, and you can log in with `demo` / `demo`.
