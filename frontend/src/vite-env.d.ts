@@ -18,5 +18,7 @@ interface ImportMeta {
 interface Window {
   __ENV__?: {
     ENVIRONMENT?: string;
+    OIDC_AUTHORITY?: string;
+    OIDC_CLIENT_ID?: string;
   };
 }
