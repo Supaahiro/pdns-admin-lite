@@ -104,13 +104,17 @@ Produces `image:version` for prereleases, `image:version,image:latest` for relea
 
 ### `.github/scripts/compute-publish-condition.sh`
 
-Env: `BRANCH` (required), `COMMIT_MSG` (optional), `GITHUB_OUTPUT` (required). Requires `fetch-depth: 0`.
+Env: `BRANCH`, `EVENT` (required), `COMMIT_MSG` (optional — only read on master
+pushes), `GITHUB_OUTPUT` (required). Requires `fetch-depth: 0`.
 
-Decides `publish` / `is_prerelease` from branch + merge-commit message,
-appending them to `$GITHUB_OUTPUT`. `master`/`hotfix/*` publish stable;
-`develop` publishes a pre-release only when the commit contains
-`[pre-release]` and HEAD is not already stable-tagged. Used by `release.yml`.
-Trimmed from blog's version of this script, which also emitted
+Decides `publish` / `is_prerelease` from trigger event + branch, appending
+them to `$GITHUB_OUTPUT`. Push to `master` publishes stable (skipped when the
+merge commit comes from a `chore/*` branch — Flow 5 master-bypass);
+`workflow_dispatch` on `hotfix/*` publishes stable from the branch itself, on
+any other branch a pre-release. Dispatch is **refused** (exit 1) on
+`master`/`main` and when HEAD already carries a `v*` release tag — both would
+re-publish an already-released version. Used by `release.yml`. Trimmed from
+blog's version of this script, which also emits
 `dotnet_configuration`/`ng_configuration` — not needed here, since this repo
 always builds production images regardless of branch; only the version tag
 differs between a pre-release and a stable release.
@@ -138,11 +142,15 @@ publish would otherwise build nothing.
 
 ### `release.yml` + `_build-and-release.yml`
 
-Push-triggered entry point (`master` / `hotfix/*` / `develop`, path-filtered
-on `backend/**` and `frontend/**`) — same split as blog: a `compute` job
-gates publishing via `compute-publish-condition.sh` and runs the
-`gitversion` composite action (only when publishing), then delegates to the
-reusable `_build-and-release.yml`, which builds and pushes both images to
+Entry point triggered on push to `master` (no paths filter — every merge to
+master is a stable release, except `chore/*` merge commits, which the gate
+script skips) and on `workflow_dispatch` (`--ref hotfix/<x>` → stable hotfix
+release from the branch; any other non-master branch → pre-release on
+demand; refused on `master`/`main` and on an already release-tagged HEAD) —
+same split as blog: a `compute` job gates publishing via
+`compute-publish-condition.sh` and runs the `gitversion` composite action
+(only when publishing), then delegates to the reusable
+`_build-and-release.yml`, which builds and pushes both images to
 GHCR (`ghcr.io/<owner>/pdns-admin-lite-backend`,
 `ghcr.io/<owner>/pdns-admin-lite-frontend`) and creates a GitHub Release
 (source archive + checksums only — the images themselves are the deployable

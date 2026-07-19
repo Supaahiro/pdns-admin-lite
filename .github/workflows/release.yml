@@ -1,7 +1,17 @@
 # .github/workflows/release.yml
-# Version: 1.0.0 (2026-07-18)
+# Version: 2.0.0 (2026-07-19)
 #
 # Changelog:
+#   2.0.0 - Release-trigger redesign (ported from blog, release.yml 3.0.0):
+#           the paths filters and the [pre-release] marker logic are gone. A
+#           release happens in exactly three cases: (1) push to master
+#           (develop→master merge) → always a stable release, except chore/*
+#           master-bypass merges, skipped via the merge-commit message;
+#           (2) workflow_dispatch on a hotfix/* branch → stable release cut
+#           from the branch itself; (3) workflow_dispatch on any other branch
+#           (e.g. develop) → pre-release on demand. Dispatch is refused on
+#           master/main and on an already release-tagged HEAD
+#           (compute-publish-condition.sh 2.0.0).
 #   1.0.0 - Baseline: push-triggered entry point (master / hotfix/* / develop,
 #           path-filtered); compute job gates publishing via
 #           compute-publish-condition.sh, then delegates to _build-and-release.
@@ -13,15 +23,14 @@
 
 name: Build & Release
 
+# Pre-release / hotfix builds are dispatched manually, e.g.:
+#   gh workflow run release.yml --ref develop      → pre-release
+#   gh workflow run release.yml --ref hotfix/<x>   → stable hotfix release
 on:
   push:
     branches:
       - master
-      - hotfix/*
-      - develop
-    paths:
-      - "backend/**"
-      - "frontend/**"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -31,19 +40,22 @@ permissions:
 concurrency:
   # Per-branch group so a develop build never cancels a master/hotfix build.
   group: build-${{ github.ref }}
-  # Only pre-release (develop) builds are cancel-in-progress; releases run to completion.
+  # Only develop (pre-release) runs are cancel-in-progress; stable releases run to completion.
   cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}
 
 jobs:
   # ── Compute publish condition + version ─────────────────────────────────────
-  # Decide whether to publish and with what parameters, based on branch + the
-  # merge commit message, then calculate the version. Both need the same
-  # fetch-depth: 0 checkout, so they share this runner.
+  # Decide whether to publish and with what parameters, based on trigger event
+  # + branch, then calculate the version. Both need the same fetch-depth: 0
+  # checkout, so they share this runner.
   #
-  #   master        → publish (stable release)
-  #   hotfix/*      → publish (stable release)
-  #   develop       → publish only if the merge commit contains "[pre-release]"
-  #                   and HEAD does not already carry a stable release tag
+  #   push to master        → stable release (skipped for chore/* merge commits
+  #                           — Flow 5 master-bypass stays outside the release cycle)
+  #   dispatch on hotfix/*  → stable release cut from the branch itself
+  #   dispatch elsewhere    → pre-release on demand
+  #   dispatch guards       → refused on master/main (would re-publish an
+  #                           already-released stable version) and on an
+  #                           already release-tagged HEAD
   compute:
     name: Compute publish condition
     runs-on: ubuntu-latest
@@ -63,6 +75,8 @@ jobs:
         id: eval
         env:
           BRANCH: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          # Empty on workflow_dispatch — only read for the chore-merge skip on push.
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: bash .github/scripts/compute-publish-condition.sh
 
