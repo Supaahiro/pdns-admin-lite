@@ -1,7 +1,14 @@
 # frontend/Dockerfile
-# Version: 1.2.0 (2026-07-18)
+# Version: 1.3.0 (2026-07-19)
 #
 # Changelog:
+#   1.3.0 - Extend the runtime-injection pattern from 1.2.0 to OIDC_AUTHORITY
+#           and OIDC_CLIENT_ID: a Keycloak on a different origin than the SPA
+#           (e.g. a platform Keycloak instead of the bundled one) needs an
+#           absolute authority URL, which VITE_OIDC_AUTHORITY couldn't provide
+#           per-environment from a single built image. oidcSettings.ts now
+#           reads window.__ENV__.OIDC_AUTHORITY/OIDC_CLIENT_ID, falling back
+#           to the same relative-path defaults as before when unset.
 #   1.2.0 - Add runtime-overridable ENVIRONMENT (default DEVELOPMENT): unlike
 #           BUILD_VERSION below, this is NOT baked at build time — Vite env
 #           vars can't be changed post-build, but whoever runs this image
