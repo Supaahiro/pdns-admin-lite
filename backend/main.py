@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_app(settings: Settings | None = None) -> FastAPI:
+    """Construct the FastAPI app: lifespan-managed HTTP clients, CORS, error
+    handlers, and the API router. Takes an explicit Settings so tests can
+    build isolated apps without touching the process environment."""
     # Called here, not at module level, so importing main.py still performs
     # no I/O on its own — only running the app (or a test building one) does.
     setup_logging()

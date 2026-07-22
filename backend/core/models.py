@@ -19,6 +19,8 @@ class RecordType(str, Enum):
 
 
 class ZoneSummary(BaseModel):
+    """A zone as listed in GET /zones, without its rrsets."""
+
     id: str
     name: str
     kind: str
@@ -27,11 +29,15 @@ class ZoneSummary(BaseModel):
 
 
 class Record(BaseModel):
+    """A single value within an rrset."""
+
     content: str
     disabled: bool = False
 
 
 class RRSet(BaseModel):
+    """A DNS record set: one name/type pair and its records."""
+
     name: str
     type: str
     ttl: int
@@ -39,6 +45,8 @@ class RRSet(BaseModel):
 
 
 class ZoneDetail(ZoneSummary):
+    """A zone with all of its rrsets, as returned by GET /zones/{zone_id}."""
+
     rrsets: list[RRSet]
 
 
