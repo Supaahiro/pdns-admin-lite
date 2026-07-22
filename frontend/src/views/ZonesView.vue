@@ -13,7 +13,7 @@ const { isAuthenticated } = useAuth();
 const zones = ref<ZoneSummary[]>([]);
 const loading = ref(true);
 const page = ref(1);
-const pageSize = ref(25);
+const pageSize = ref(10);
 const pagedZones = computed(() =>
   zones.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value),
 );
