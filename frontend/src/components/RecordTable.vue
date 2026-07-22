@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 import { RECORD_TYPES, type RRSet } from "../api/types";
 import { useAuth } from "../auth";
+import Paginator from "./Paginator.vue";
 
 const props = defineProps<{ rrsets: RRSet[]; zoneName: string; protected: boolean }>();
 
@@ -14,6 +15,8 @@ const emit = defineEmits<{
 const { isAuthenticated } = useAuth();
 
 const filter = ref("");
+const page = ref(1);
+const pageSize = ref(25);
 
 const filteredRrsets = computed(() => {
   const needle = filter.value.trim().toLowerCase();
@@ -26,6 +29,16 @@ const filteredRrsets = computed(() => {
       rrset.type.toLowerCase().includes(needle) ||
       rrset.records.some((record) => record.content.toLowerCase().includes(needle)),
   );
+});
+
+const pagedRrsets = computed(() =>
+  filteredRrsets.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value),
+);
+
+// A save/delete reloads the whole rrsets array — the previously-shown page
+// may no longer exist, same as a filter change narrowing the result set.
+watch([filter, () => props.rrsets], () => {
+  page.value = 1;
 });
 
 function isManaged(rrset: RRSet): boolean {
@@ -78,7 +91,7 @@ async function copyContent(content: string): Promise<void> {
       <tr v-if="rrsets.length > 0 && filteredRrsets.length === 0">
         <td colspan="5" class="muted">No records match "{{ filter }}".</td>
       </tr>
-      <tr v-for="rrset in filteredRrsets" :key="`${rrset.name}/${rrset.type}`">
+      <tr v-for="rrset in pagedRrsets" :key="`${rrset.name}/${rrset.type}`">
         <td class="mono">{{ rrset.name }}</td>
         <td><span class="tag">{{ rrset.type }}</span></td>
         <td>{{ rrset.ttl }}</td>
@@ -114,4 +127,5 @@ async function copyContent(content: string): Promise<void> {
       </tr>
     </tbody>
   </table>
+  <Paginator v-model:page="page" v-model:page-size="pageSize" :total="filteredRrsets.length" />
 </template>
