@@ -1,6 +1,6 @@
 import httpx
 
-from tests.conftest import ZONES_PATH
+from tests.conftest import ZONES_PATH, auth_headers
 
 ZONE = {
     "id": "example.test.",
@@ -42,7 +42,7 @@ def test_health_does_not_call_pdns(client, pdns_mock) -> None:
 def test_list_zones_maps_summary(client, pdns_mock) -> None:
     """Zone listing is slimmed to id/name/kind/serial/protected and sends the API key."""
     route = pdns_mock.get(ZONES_PATH).respond(200, json=[ZONE])
-    response = client.get("/api/zones")
+    response = client.get("/api/zones", headers=auth_headers())
     assert response.status_code == 200
     assert response.json() == [
         {
@@ -59,7 +59,7 @@ def test_list_zones_maps_summary(client, pdns_mock) -> None:
 def test_get_zone_shapes_and_sorts_rrsets(client, pdns_mock) -> None:
     """Zone detail keeps only displayable rrset fields, sorted by name/type."""
     pdns_mock.get(f"{ZONES_PATH}/example.test.").respond(200, json=ZONE)
-    response = client.get("/api/zones/example.test.")
+    response = client.get("/api/zones/example.test.", headers=auth_headers())
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == "example.test."
@@ -73,7 +73,7 @@ def test_get_zone_shapes_and_sorts_rrsets(client, pdns_mock) -> None:
 
 def test_zone_not_found_passes_through(client, pdns_mock) -> None:
     pdns_mock.get(f"{ZONES_PATH}/nope.test.").respond(404, json={"error": "Not Found"})
-    response = client.get("/api/zones/nope.test.")
+    response = client.get("/api/zones/nope.test.", headers=auth_headers())
     assert response.status_code == 404
     assert response.json() == {
         "detail": "PowerDNS returned an error: Not Found",
@@ -84,7 +84,7 @@ def test_zone_not_found_passes_through(client, pdns_mock) -> None:
 def test_upstream_401_maps_to_502(client, pdns_mock) -> None:
     """A bad API key is a server misconfiguration, not the UI user's fault."""
     pdns_mock.get(ZONES_PATH).respond(401, json={"error": "Unauthorized"})
-    response = client.get("/api/zones")
+    response = client.get("/api/zones", headers=auth_headers())
     assert response.status_code == 502
     assert response.json() == {
         "detail": "PowerDNS returned an error: Unauthorized",
@@ -94,7 +94,7 @@ def test_upstream_401_maps_to_502(client, pdns_mock) -> None:
 
 def test_pdns_unreachable_maps_to_502(client, pdns_mock) -> None:
     pdns_mock.get(ZONES_PATH).mock(side_effect=httpx.ConnectError("refused"))
-    response = client.get("/api/zones")
+    response = client.get("/api/zones", headers=auth_headers())
     assert response.status_code == 502
     body = response.json()
     assert "unreachable" in body["detail"]

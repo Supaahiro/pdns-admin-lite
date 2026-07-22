@@ -10,6 +10,8 @@ zone (see ensure_zone_mutable / the apex-NS check below).
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
+from scalar_fastapi import get_scalar_api_reference
 
 from core.auth import require_auth
 from core.config import Settings
@@ -56,6 +58,57 @@ def _ensure_apex_ns_mutable(request: Request, zone_id: str, name: str, record_ty
         )
 
 
+def _require_development() -> None:
+    """Backs /openapi.json and /scalar: both are dev-only tooling, never
+    reachable once ENVIRONMENT flips away from DEVELOPMENT. Read live, at
+    request time — same convention as /health's own ENVIRONMENT read — so
+    flipping the env var needs no rebuild/restart of the route registration.
+    """
+    if os.environ.get("ENVIRONMENT", "DEVELOPMENT") != "DEVELOPMENT":
+        raise HTTPException(404)
+
+
+@router.get("/openapi.json", include_in_schema=False, dependencies=[Depends(_require_development)])
+async def openapi_schema(request: Request) -> dict:
+    """The OpenAPI document backing /scalar. Dev-only, same as the docs UI itself."""
+    return request.app.openapi()
+
+
+@router.get("/scalar", include_in_schema=False, dependencies=[Depends(_require_development)])
+async def api_docs(request: Request) -> HTMLResponse:
+    """Interactive API docs (Scalar), dev-only, with Keycloak OAuth2/PKCE
+    prefilled so a developer can log in and try authenticated endpoints
+    without hand-crafting a bearer token."""
+    settings = _settings(request)
+    return get_scalar_api_reference(
+        openapi_url="/api/openapi.json",
+        title="pdns-admin-lite API",
+        persist_auth=True,
+        authentication={
+            "preferredSecurityScheme": "oidc",
+            "securitySchemes": {
+                "oidc": {
+                    "type": "oauth2",
+                    "flows": {
+                        "authorizationCode": {
+                            "authorizationUrl": f"{settings.oidc_issuer}/protocol/openid-connect/auth",
+                            "tokenUrl": f"{settings.oidc_issuer}/protocol/openid-connect/token",
+                            "x-scalar-client-id": settings.oidc_client_id,
+                            "x-usePkce": "SHA-256",
+                            "scopes": {
+                                "openid": "OpenID Connect",
+                                "profile": "Basic profile",
+                                "email": "Email address",
+                            },
+                            "selectedScopes": ["openid", "profile", "email"],
+                        }
+                    },
+                }
+            },
+        },
+    )
+
+
 @router.get("/health")
 async def health() -> dict:
     """Liveness/readiness probe: reports the running image's version and environment."""
@@ -69,7 +122,7 @@ async def health() -> dict:
     }
 
 
-@router.get("/zones", response_model=list[ZoneSummary])
+@router.get("/zones", response_model=list[ZoneSummary], dependencies=[Depends(require_auth)])
 async def list_zones(request: Request) -> list[dict]:
     """List every zone known to PowerDNS, flagged with whether each is protected."""
     protected_zones = _settings(request).protected_zones
@@ -79,7 +132,7 @@ async def list_zones(request: Request) -> list[dict]:
     return zones
 
 
-@router.get("/zones/{zone_id}", response_model=ZoneDetail)
+@router.get("/zones/{zone_id}", response_model=ZoneDetail, dependencies=[Depends(require_auth)])
 async def get_zone(request: Request, zone_id: str) -> dict:
     """Fetch a zone with all of its rrsets, sorted by name then type."""
     zone = await _client(request).get_zone(zone_id)

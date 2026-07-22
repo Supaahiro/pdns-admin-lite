@@ -41,6 +41,7 @@ services:
       OIDC_ISSUER: "${OIDC_ISSUER:-${PUBLIC_ORIGIN:-http://localhost:8080}/auth/realms/pdns-admin-lite}"
       OIDC_JWKS_URL: "${OIDC_JWKS_URL:-http://keycloak:8080/auth/realms/pdns-admin-lite/protocol/openid-connect/certs}"
       OIDC_AUDIENCE: "${OIDC_AUDIENCE:-pdns-admin-lite-api}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-pdns-admin-lite-spa}"
       PROTECTED_ZONES: "${PROTECTED_ZONES:-example.test.}"
       DEFAULT_NS: "${DEFAULT_NS:-ns1.example.test.}"
     healthcheck:
