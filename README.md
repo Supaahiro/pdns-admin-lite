@@ -2,11 +2,9 @@
 
 [![release](https://github.com/Supaahiro/pdns-admin-lite/actions/workflows/release.yml/badge.svg)](https://github.com/Supaahiro/pdns-admin-lite/actions/workflows/release.yml)
 
-A minimal web UI for managing DNS records on a **PowerDNS Authoritative** server, built as a proof of concept: a **FastAPI** backend acting as a thin adapter over the PowerDNS REST API, and a **Vue 3 + Vite** frontend served by nginx, all wired together behind a **Caddy** edge proxy with docker-compose.
+A minimal web UI for managing DNS zones and records on a **PowerDNS Authoritative** server. It consists of a **FastAPI** backend, a **Vue** 3 frontend, and a **Caddy** reverse proxy, all orchestrated with **Docker Compose**.
 
-> Scope note: this UI owns the lifecycle of the *demo/dev* zone — or whatever zone you point it
-> at and intend it to own — subject to `PROTECTED_ZONES`. Zones provisioned elsewhere (Ansible,
-> a real homelab's authoritative config) stay untouchable through this tool by naming them there.
+> Scope: the application manages only the zones it owns. Zones listed in `PROTECTED_ZONES` (and their subzones) are always read-only and cannot be modified or deleted through the UI.
 
 ```mermaid
 flowchart LR
@@ -34,103 +32,96 @@ flowchart LR
 
 ## Key Features
 
-- 📋 Zone list and per-zone record table (SOA and other unmanaged types shown read-only), with a client-side filter over name/type/content and one-click copy on record values
-- ✏️ Create, edit, and delete record sets (`A`, `AAAA`, `CNAME`, `TXT`, `MX`, `SRV`, `NS`, `PTR`) via PowerDNS `rrsets` PATCH calls, destructive actions behind a confirmation dialog
-- 🌐 Create and delete zones (`Native` kind), with `PROTECTED_ZONES` making the zone(s) you designate — and their subzones — permanently un-deletable and un-shadowable, enforced server-side regardless of who is authenticated
-- 🔌 Backend is a thin async adapter (`httpx`) over the PowerDNS REST API — no database of its own
-- 🔐 Record mutations require a Keycloak-issued token (`Authorization: Bearer`), verified server-side against the realm's JWKS — the API itself keeps `GET` anonymous, matching what an open AXFR would already leak; the SPA additionally gates every screen behind sign-in via a router guard
-- 🐳 Self-contained dev stack: Caddy edge (only published port) → nginx static frontend + FastAPI backend + a disposable, seeded demo PowerDNS + a dev-mode Keycloak identity provider
-- 🧪 Backend test suite mocks PowerDNS with `respx` — no live DNS server needed in CI
+- 🌐 Manage PowerDNS zones and DNS records through a simple web UI
+- ✏️ Create, edit and delete common DNS record types (`A`, `AAAA`, `CNAME`, `TXT`, `MX`, `SRV`, `NS`, `PTR`)
+- 👁️ Read-only view for unmanaged record types (for example `SOA`)
+- 🛡️ Server-side protected zones (`PROTECTED_ZONES`) that cannot be modified or deleted
+- ⚡ FastAPI backend acting as a thin adapter over the PowerDNS REST API
+- 🔐 Keycloak authentication for write operations; read operations remain public
+- 🐳 Self-contained Docker Compose stack with PowerDNS, Keycloak, Caddy and the web application
+- 🧪 Backend unit tests with mocked PowerDNS using `respx`
 
 ## Architecture
 
-The backend fetches JWKS from Keycloak over the compose network (`http://keycloak:8080/auth/...`)
-but asserts the browser-visible issuer (`${PUBLIC_ORIGIN}/auth/realms/pdns-admin-lite`) in
-token claims — the two URLs differ because "the backend" and "the browser" reach Keycloak
-from different places, but tokens only ever carry the browser-visible one.
+The stack is composed of the following components:
 
-| Path | What it is |
+| Component | Description |
 |---|---|
-| `backend/` | FastAPI app (Poetry, Python 3.13): `core/pdns.py` PowerDNS client, `api/routes.py` endpoints, `tests/` — see [backend/CONVENTIONS.md](backend/CONVENTIONS.md) |
-| `frontend/` | Vue 3 + Vite + TypeScript SPA, multi-stage Dockerfile ending in `nginx:alpine` — see [frontend/CONVENTIONS.md](frontend/CONVENTIONS.md) |
-| `vendors/pdns/seed.sh` | One-shot seeder creating the demo `example.test.` zone through the same API calls Ansible uses |
-| `vendors/keycloak/realm-export.json` | Checked-in realm (`pdns-admin-lite` realm, `pdns-admin-lite-spa` public PKCE client, one user from `PDNS_ADMIN_LITE_USER`/`PDNS_ADMIN_LITE_PASSWORD`), imported at startup via `--import-realm` |
-| `docker-compose.yml` | Dev stack: `edge`, `frontend`, `backend`, `pdns`, `pdns-seed`, `keycloak` |
-| `Caddyfile` | Edge routing: `/api/*` → backend, `/auth/admin/*` → 403, `/auth/*` → keycloak, everything else → frontend |
+| `backend/` | FastAPI application exposing the REST API and acting as a thin adapter over PowerDNS |
+| `frontend/` | Vue 3 + Vite single-page application served by nginx |
+| `vendors/pdns/seed.sh` | Seeds the demo `example.test.` zone |
+| `vendors/keycloak/realm-export.json` | Development Keycloak realm imported at startup |
+| `docker-compose.yml` | Local development stack |
+| `Caddyfile` | Reverse proxy routing requests to the appropriate service |
 
-### Identity (Keycloak, dev mode)
+Authentication is provided by Keycloak using OIDC, while the backend validates JWTs against the realm's JWKS. See the sections below for authentication and deployment details.
 
-The compose stack runs Keycloak in `start-dev` mode (H2, no TLS — a POC convenience, not a
-production posture) behind Caddy at `/auth/*`, with the demo login `demo` / `demo`
-(`PDNS_ADMIN_LITE_USER` / `PDNS_ADMIN_LITE_PASSWORD` in `.env`). The Keycloak **admin console and admin REST API are not reachable
-through the edge** — `/auth/admin/*` returns 403 there by design. Admin operations against the
-dev Keycloak go through its own CLI instead:
+## Identity (Keycloak)
 
-```bash
-docker compose exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
-  --server http://localhost:8080/auth --realm master --user admin --password "$KC_ADMIN_PASSWORD"
-docker compose exec keycloak /opt/keycloak/bin/kcadm.sh get users -r pdns-admin-lite
-```
+The development stack includes a preconfigured Keycloak instance running in development mode and exposed through Caddy under `/auth`.
 
-Browsing from another machine on the LAN — the actual point of this tool — means setting one
-variable in `.env` before `docker compose up`:
+Default credentials:
+
+| User | Password |
+|---|---|
+| `demo` | `demo` |
+
+The Keycloak admin console is intentionally not exposed through the edge proxy. Administrative tasks can still be performed from inside the container using `kcadm.sh`.
+
+### Accessing from another machine
+
+To access the application from another machine on the network, set `PUBLIC_ORIGIN` to the address reachable by other clients:
 
 ```bash
 PUBLIC_ORIGIN=http://<host-ip>:8080
 ```
 
-This feeds Keycloak's hostname, the realm's redirect URIs, and the issuer the backend asserts,
-so login and token validation keep working from any machine that can reach that origin.
-Changing `PUBLIC_ORIGIN` (or `PDNS_ADMIN_LITE_USER`/`PDNS_ADMIN_LITE_PASSWORD`) after the first
-`up` requires recreating the container so the realm re-imports with the new placeholder values:
+Then recreate the Keycloak container to apply the updated OIDC configuration:
 
 ```bash
 docker compose up --force-recreate keycloak
 ```
 
-**Signing in:** the SPA uses `oidc-client-ts` for Authorization Code + PKCE against the realm
-above. Tokens are kept in memory only — never `localStorage` — so an XSS bug can't yield a
-durable credential; the trade-off is that a hard refresh drops the in-memory token, recovered
-transparently via a silent re-authentication against Keycloak's SSO session cookie (a hidden
-iframe hitting `/silent-renew.html`). A router guard gates every SPA route behind sign-in: an
-anonymous visitor hitting `/` or a deep link like `/zones/example.test.` is redirected to
-`/login`, and lands back on the originally requested path once they authenticate. This is a
-frontend UX/access-control layer, not a mirror of the backend policy — the API's `GET` endpoints
-stay anonymous by design (see below), so a bare `curl http://localhost:8080/api/zones` still
-works without a token even though the SPA itself won't render without one. Mutating endpoints
-are enforced independently server-side regardless of what the UI shows — a bare `curl -X PUT`
-without a token gets `401`.
-
-> **Before trusting this on your LAN:** with the checked-in `demo`/`demo` credentials and
-> default `KC_ADMIN_PASSWORD`, any LAN user who can reach `:8080` can log in and mutate DNS
-> records. Rotate `PDNS_ADMIN_LITE_PASSWORD` and `KC_ADMIN_PASSWORD` in `.env` before relying on
-> this beyond a local demo, and set `PROTECTED_ZONES` to the zone(s) that actually matter. What the
-> defaults still guarantee regardless of credentials: there is no admin-console side door
-> (blocked at the edge, not just hidden), and the zones named in `PROTECTED_ZONES` — plus any of
-> their subzones — cannot be deleted or shadowed by any authenticated user, including one who
-> has correctly guessed the demo password.
+The default user is intended for development only. Update the credentials before
+using the application in a real environment.
 
 ### Using an external Keycloak (optional)
 
-`docker-compose.yml` always bundles its own dev-mode Keycloak. To point at one you already run
-elsewhere instead — no rebuild needed:
+The bundled Keycloak instance is intended for development only.
+You can use an existing Keycloak installation by overriding the OIDC settings.
 
-- **Frontend**: set `OIDC_AUTHORITY` (absolute URL, e.g. `https://keycloak.example.org/realms/<realm>`)
-  and `OIDC_CLIENT_ID` as env vars on the `frontend` service — resolved into `window.__ENV__` at
-  container *start* time (`frontend/src/oidcSettings.ts`), the same mechanism already used for
-  `ENVIRONMENT`. Unset keeps today's default (relative, same-origin bundled Keycloak).
-- **Backend**: set `OIDC_ISSUER` / `OIDC_JWKS_URL` / `OIDC_AUDIENCE` to match the external realm —
-  already plain runtime env vars, same as for the bundled Keycloak.
-- On the external Keycloak, provision a public PKCE client (Standard flow, no client secret, PKCE
-  S256) with redirect URIs/web origins covering your SPA's origin, plus an audience mapper
-  matching `OIDC_AUDIENCE`.
-- Skip the bundled `keycloak` service and its edge routing — the SPA talks to the external origin
-  directly, a normal cross-origin OAuth redirect.
+Frontend:
+
+```env
+OIDC_AUTHORITY=https://keycloak.example.org/realms/<realm>
+OIDC_CLIENT_ID=pdns-admin-lite
+```
+
+Backend:
+
+```env
+OIDC_ISSUER=https://keycloak.example.org/realms/<realm>
+OIDC_JWKS_URL=https://keycloak.example.org/realms/<realm>/protocol/openid-connect/certs
+OIDC_AUDIENCE=pdns-admin-lite-api
+```
+
+Configure a public PKCE client in Keycloak:
+
+- Standard flow enabled
+- Client authentication disabled
+- PKCE S256 enabled
+- Redirect URIs matching the frontend URL
+- Audience mapper matching `OIDC_AUDIENCE`
+
+When using an external Keycloak, disable the bundled `keycloak` service.
 
 ## Prerequisites
 
-- Docker + docker compose (for the full stack)
-- Optional, for local development outside containers: Python ≥ 3.13 with [Poetry](https://python-poetry.org/), Node.js ≥ 24
+- Docker Engine with Docker Compose v2
+
+For local development:
+- Python ≥ 3.13 with [Poetry](https://python-poetry.org/)
+- Node.js ≥ 24
 
 ## Quick Setup
 
@@ -139,88 +130,81 @@ cp .env.example .env
 docker compose up --build --wait
 ```
 
-Then open <http://localhost:8080> — the demo `example.test.` zone is already seeded, and you can log in with `demo` / `demo`.
+Open <http://localhost:8080>.
+
+The demo `example.test.` zone is already available.
 
 ### What to try
 
-A walkthrough that exercises every guarantee this project makes, in order:
+After startup:
 
-1. **Browse anonymously.** The zone list and record tables render with no login — `GET` is
-   intentionally open, matching what an open AXFR would already leak.
-   ```bash
-   curl http://localhost:8080/api/zones
-   curl http://localhost:8080/api/zones/example.test.
-   ```
-2. **Try a mutation without a token — 401.** The API refuses regardless of what the UI shows.
-   ```bash
-   curl -i -X PUT http://localhost:8080/api/zones/example.test./records \
-     -H "Content-Type: application/json" \
-     -d '{"name":"web","type":"A","ttl":3600,"records":["203.0.113.10"]}'
-   ```
-3. **Log in** with `demo` / `demo` (top-right, or the full-page prompt on a protected route) and
-   add or edit a record — the SPA now attaches the token and the mutation succeeds.
-4. **Create a zone**, then **try to delete `example.test.`** — refused with `403 zone_protected`,
-   both in the UI (the button stays disabled) and directly:
-   ```bash
-   curl -i -X DELETE http://localhost:8080/api/zones/example.test. \
-     -H "Authorization: Bearer <token-from-the-browser-devtools>"
-   ```
-5. **Confirm the admin console has no side door:**
-   ```bash
-   curl -i http://localhost:8080/auth/admin/
-   ```
-   → `403`, blocked at the edge before it ever reaches Keycloak.
+- Browse zones and records without authentication.
+- Log in with the demo user and create or edit a record.
+- Try deleting the protected example.test. zone — the operation is rejected.
+- Verify that Keycloak admin endpoints are not exposed through the proxy.
 
 ## Configuration
 
-All settings come from environment variables (see `.env.example`):
+The application is configured through environment variables
+(see `.env.example`).
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `EDGE_PORT` | `8080` | Host port published by the Caddy edge |
-| `PUBLIC_ORIGIN` | `http://localhost:8080` | Origin browsers use; feeds Keycloak's hostname, redirect URIs, and the issuer the backend asserts |
-| `PDNS_API_URL` | `http://pdns:8081/api/v1` | PowerDNS API endpoint the backend talks to |
-| `PDNS_API_KEY` | `changeme-dev-key` | PowerDNS API key (`X-API-Key` header) |
-| `PROTECTED_ZONES` | `example.test.` | Comma-separated; these zones and their subzones can never be deleted or created-over, regardless of who is authenticated |
-| `DEFAULT_NS` | `ns1.example.test.` | NS content for zones created through the UI |
-| `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | `admin` / `changeme-dev-admin` | Keycloak bootstrap admin (console not routed through the edge; use `kcadm.sh`, see above) |
-| `PDNS_ADMIN_LITE_USER` / `PDNS_ADMIN_LITE_PASSWORD` | `demo` / `demo` | Username/password for the demo login |
-| `OIDC_ISSUER` / `OIDC_JWKS_URL` / `OIDC_AUDIENCE` | derived from `PUBLIC_ORIGIN` | Token validation settings the backend enforces on record mutations |
+Common settings:
 
-### Pointing at a real PowerDNS
+| Variable | Purpose |
+|---|---|
+| `EDGE_PORT` | HTTP port exposed by the reverse proxy |
+| `PUBLIC_ORIGIN` | Public URL used by the frontend and authentication flow |
+| `PDNS_API_URL` | PowerDNS API endpoint |
+| `PDNS_API_KEY` | PowerDNS API key |
+| `PROTECTED_ZONES` | Zones that cannot be modified or deleted |
 
-Set the real endpoint and key in `.env` (never commit it — it is gitignored):
+### Advanced configuration
+
+The following variables are mainly used for custom deployments:
+
+| Variable | Purpose |
+|---|---|
+| `DEFAULT_NS` | Default NS record for newly created zones |
+| `KC_ADMIN_USER` / `KC_ADMIN_PASSWORD` | Keycloak bootstrap administrator |
+| `PDNS_ADMIN_LITE_USER` / `PDNS_ADMIN_LITE_PASSWORD` | Demo user credentials |
+| `OIDC_ISSUER` / `OIDC_JWKS_URL` / `OIDC_AUDIENCE` | Backend token validation settings |
+
+### Connecting to an external PowerDNS server
+
+Set the PowerDNS endpoint and API key in `.env`:
 
 ```bash
 PDNS_API_URL=http://10.0.0.12:8081/api/v1
 PDNS_API_KEY=<real-key>
 ```
 
-Then start only the app services, skipping the demo DNS server (Keycloak stays — auth is part of the app):
+Start the application services without the bundled demo PowerDNS instance:
 
 ```bash
 docker compose up --build --no-deps edge frontend backend keycloak
 ```
 
-Before pointing this at a zone you actually care about, work through the **"Before trusting this
-on your LAN"** checklist above: rotate `PDNS_ADMIN_LITE_PASSWORD` and `KC_ADMIN_PASSWORD`, and set
-`PROTECTED_ZONES` to the real zone(s) this server is authoritative for — the demo default
-(`example.test.`) protects nothing on your actual DNS.
+Before using a real zone:
 
-> Note: the edge listens on plain HTTP for this POC. Switching Caddy to TLS is a two-line `Caddyfile` change (`tls internal` or a real hostname with ACME).
+- Change the default demo credentials
+- Configure `PROTECTED_ZONES` with the zones managed by this instance
+
+> The default stack uses HTTP for local development. For a real deployment, configure TLS in Caddy.
 
 ## Local development
 
-Backend (REPL-friendly, auto-reload):
+Backend:
 
 ```bash
 cd backend
 poetry install
-poetry run pytest -v                 # unit tests, PowerDNS mocked with respx
-poetry run uvicorn main:app --reload # http://localhost:8000, needs a reachable PDNS_API_URL
+poetry run pytest -v
+poetry run uvicorn main:app --reload
 ```
 
-Frontend (Vite dev server proxies `/api` to `http://localhost:8000`, so no CORS setup is needed):
+The API is available at `http://localhost:8000` and requires a reachable PowerDNS API endpoint.
+
+Frontend:
 
 ```bash
 cd frontend
@@ -229,26 +213,31 @@ npm run dev     # http://localhost:5173
 npm run build   # type-check (vue-tsc) + production bundle
 ```
 
-Tip: `docker compose up pdns pdns-seed` gives you a disposable seeded PowerDNS on the compose network; add `ports: ["8081:8081"]` to the `pdns` service locally if you want to reach it from the host.
+The Vite dev server proxies `/api` requests to the backend, so no CORS configuration is required.
 
-See [backend/CONVENTIONS.md](backend/CONVENTIONS.md) and [frontend/CONVENTIONS.md](frontend/CONVENTIONS.md) before contributing — they cover the error/auth/zone-protection patterns and the UI/UX rules this codebase expects new code to follow.
+Tip: `docker compose up pdns pdns-seed` starts a disposable seeded PowerDNS instance for local development. Add `ports: ["8081:8081"]` to the `pdns` service if you need host access.
 
-## API surface
+See [backend/CONVENTIONS.md](backend/CONVENTIONS.md) and [frontend/CONVENTIONS.md](frontend/CONVENTIONS.md) for backend and frontend development conventions.
 
-| Endpoint | Auth | Maps to (PowerDNS) | Notes |
-|---|---|---|---|
-| `GET /api/health` | anonymous | — | liveness, used by the Docker healthcheck |
-| `GET /api/zones` | anonymous | `GET /zones` | id, name, kind, serial, `protected` |
-| `GET /api/zones/{zone_id}` | anonymous | `GET /zones/{id}` | includes rrsets, sorted by name/type |
-| `POST /api/zones` | **Bearer token** | `POST /zones` | body `{"name": "lab.test"}`; `kind: Native`; 409 `zone_exists` if it already exists; 403 `zone_protected` if the name is a subzone of a protected zone; 422 `invalid_zone_name` for non-LDH names |
-| `DELETE /api/zones/{zone_id}` | **Bearer token** | `DELETE /zones/{id}` | 403 `zone_protected` for a protected zone or any of its subzones |
-| `POST /api/zones/{zone_id}/records` | **Bearer token** | `PATCH` (`REPLACE`) | 409 if the rrset already exists; 403 `zone_protected` for the apex `NS` rrset of a protected zone |
-| `PUT /api/zones/{zone_id}/records` | **Bearer token** | `PATCH` (`REPLACE`) | replaces the whole rrset; same apex-`NS` guard as above |
-| `DELETE /api/zones/{zone_id}/records?name=&type=` | **Bearer token** | `PATCH` (`DELETE`) | deletes the rrset; same apex-`NS` guard as above |
+## REST API
 
-Mutating endpoints require `Authorization: Bearer <token>` with a token issued by this stack's Keycloak realm (`aud: pdns-admin-lite-api`, RS256, verified against the realm's JWKS). Missing/invalid token → `401 not_authenticated`; OIDC settings unset on the backend → `503 auth_not_configured` (fails closed, never open).
+The backend exposes a small REST API used by the frontend.
 
-Record names may be relative (`web`), `@` or `` (empty) for the zone apex, or FQDNs — the backend canonicalizes them to the trailing-dot form PowerDNS expects, in every form, before any protection check runs. The exact zone-protection matrix (what's allowed on a protected zone vs. its subzones vs. any other zone) lives in [backend/CONVENTIONS.md](backend/CONVENTIONS.md).
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /api/health` | Public | Service health check |
+| `GET /api/zones` | Public | List available zones |
+| `GET /api/zones/{zone_id}` | Public | Get zone details and records |
+| `POST /api/zones` | Bearer token | Create a zone |
+| `DELETE /api/zones/{zone_id}` | Bearer token | Delete a zone |
+| `POST /api/zones/{zone_id}/records` | Bearer token | Create a record |
+| `PUT /api/zones/{zone_id}/records` | Bearer token | Replace a record set |
+| `DELETE /api/zones/{zone_id}/records` | Bearer token | Delete a record set |
+
+All write operations require a valid Keycloak-issued bearer token. Invalid or missing tokens are rejected by the backend.
+
+Record names can be relative, apex (`@` or empty), or fully qualified.
+The backend normalizes names to PowerDNS canonical format before applying protection rules.
 
 ![pdns-admin-lite web UI](assets/img/pdns-admin-lite.webp)
 
