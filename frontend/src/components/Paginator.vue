@@ -23,7 +23,12 @@ function onPageSizeChange(event: Event): void {
 </script>
 
 <template>
-  <div v-if="total > pageSize" class="paginator">
+  <!--
+    Keep paginator always visible.
+    Even when all records fit on a single page, the user should still be able
+    to change the page size (e.g. from 10 to 25/50/100 records per page).
+  -->
+  <div class="paginator">
     <span class="muted">Page {{ page }} of {{ pageCount }}</span>
     <button type="button" class="secondary" :disabled="page <= 1" @click="goTo(page - 1)">
       Prev

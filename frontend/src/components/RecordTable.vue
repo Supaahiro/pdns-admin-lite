@@ -16,7 +16,7 @@ const { isAuthenticated } = useAuth();
 
 const filter = ref("");
 const page = ref(1);
-const pageSize = ref(25);
+const pageSize = ref(10);
 
 const filteredRrsets = computed(() => {
   const needle = filter.value.trim().toLowerCase();
@@ -74,58 +74,61 @@ async function copyContent(content: string): Promise<void> {
   <input
     v-if="rrsets.length > 0"
     v-model="filter"
+    id="record-filter"
     class="record-filter"
     placeholder="Filter by name, type, or content…"
   />
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Type</th>
-        <th>TTL</th>
-        <th>Content</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-if="rrsets.length > 0 && filteredRrsets.length === 0">
-        <td colspan="5" class="muted">No records match "{{ filter }}".</td>
-      </tr>
-      <tr v-for="rrset in pagedRrsets" :key="`${rrset.name}/${rrset.type}`">
-        <td class="mono">{{ rrset.name }}</td>
-        <td><span class="tag">{{ rrset.type }}</span></td>
-        <td>{{ rrset.ttl }}</td>
-        <td class="mono">
-          <div v-for="record in rrset.records" :key="record.content" class="record-content">
-            <span>{{ record.content }}</span>
-            <span v-if="record.disabled" class="muted">(disabled)</span>
-            <button
-              type="button"
-              class="copy-button"
-              :title="`Copy ${record.content}`"
-              @click="copyContent(record.content)"
-            >
-              {{ copiedContent === record.content ? "Copied" : "Copy" }}
-            </button>
-          </div>
-        </td>
-        <td class="actions">
-          <template v-if="isManaged(rrset) && isAuthenticated">
-            <template v-if="isProtectedApexNs(rrset)">
-              <button disabled title="Protected zone — set PROTECTED_ZONES to change">Edit</button>
-              <button class="danger" disabled title="Protected zone — set PROTECTED_ZONES to change">
-                Delete
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>TTL</th>
+          <th>Content</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-if="rrsets.length > 0 && filteredRrsets.length === 0">
+          <td colspan="5" class="muted">No records match "{{ filter }}".</td>
+        </tr>
+        <tr v-for="rrset in pagedRrsets" :key="`${rrset.name}/${rrset.type}`">
+          <td class="mono">{{ rrset.name }}</td>
+          <td><span class="tag">{{ rrset.type }}</span></td>
+          <td>{{ rrset.ttl }}</td>
+          <td class="mono">
+            <div v-for="record in rrset.records" :key="record.content" class="record-content">
+              <span>{{ record.content }}</span>
+              <span v-if="record.disabled" class="muted">(disabled)</span>
+              <button
+                type="button"
+                class="copy-button"
+                :title="`Copy ${record.content}`"
+                @click="copyContent(record.content)"
+              >
+                {{ copiedContent === record.content ? "Copied" : "Copy" }}
               </button>
+            </div>
+          </td>
+          <td class="actions">
+            <template v-if="isManaged(rrset) && isAuthenticated">
+              <template v-if="isProtectedApexNs(rrset)">
+                <button disabled title="Protected zone — set PROTECTED_ZONES to change">Edit</button>
+                <button class="danger" disabled title="Protected zone — set PROTECTED_ZONES to change">
+                  Delete
+                </button>
+              </template>
+              <template v-else>
+                <button @click="emit('edit', rrset)">Edit</button>
+                <button class="danger" @click="emit('remove', rrset)">Delete</button>
+              </template>
             </template>
-            <template v-else>
-              <button @click="emit('edit', rrset)">Edit</button>
-              <button class="danger" @click="emit('remove', rrset)">Delete</button>
-            </template>
-          </template>
-          <span v-else-if="isManaged(rrset)" class="muted">Sign in to edit</span>
-        </td>
-      </tr>
-    </tbody>
-  </table>
+            <span v-else-if="isManaged(rrset)" class="muted">Sign in to edit</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
   <Paginator v-model:page="page" v-model:page-size="pageSize" :total="filteredRrsets.length" />
 </template>
