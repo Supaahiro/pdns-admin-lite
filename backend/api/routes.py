@@ -58,6 +58,7 @@ def _ensure_apex_ns_mutable(request: Request, zone_id: str, name: str, record_ty
 
 @router.get("/health")
 async def health() -> dict:
+    """Liveness/readiness probe: reports the running image's version and environment."""
     # APP_VERSION is baked in at image build time; "dev" outside a release
     # build. ENVIRONMENT is a plain container env var, read live so it can be
     # overridden without a rebuild (see backend/Dockerfile).
@@ -70,6 +71,7 @@ async def health() -> dict:
 
 @router.get("/zones", response_model=list[ZoneSummary])
 async def list_zones(request: Request) -> list[dict]:
+    """List every zone known to PowerDNS, flagged with whether each is protected."""
     protected_zones = _settings(request).protected_zones
     zones = await _client(request).list_zones()
     for zone in zones:
@@ -79,6 +81,7 @@ async def list_zones(request: Request) -> list[dict]:
 
 @router.get("/zones/{zone_id}", response_model=ZoneDetail)
 async def get_zone(request: Request, zone_id: str) -> dict:
+    """Fetch a zone with all of its rrsets, sorted by name then type."""
     zone = await _client(request).get_zone(zone_id)
     zone["protected"] = is_protected_zone(zone["name"], _settings(request).protected_zones)
     zone["rrsets"] = sorted(
@@ -89,6 +92,7 @@ async def get_zone(request: Request, zone_id: str) -> dict:
 
 @router.post("/zones", status_code=201, dependencies=[Depends(require_auth)])
 async def create_zone(request: Request, body: ZoneCreate) -> dict:
+    """Create a new zone in PowerDNS, seeded with the configured default nameserver."""
     settings = _settings(request)
     name = validate_zone_name(body.name)
     ensure_zone_creatable(name, settings.protected_zones)
@@ -99,12 +103,14 @@ async def create_zone(request: Request, body: ZoneCreate) -> dict:
 
 @router.delete("/zones/{zone_id}", status_code=204, dependencies=[Depends(require_auth)])
 async def delete_zone(request: Request, zone_id: str) -> None:
+    """Delete a zone and everything in it. Refused for protected zones and their subzones."""
     ensure_zone_mutable(zone_id, _settings(request).protected_zones)
     await _client(request).delete_zone(zone_id)
 
 
 @router.post("/zones/{zone_id}/records", status_code=201, dependencies=[Depends(require_auth)])
 async def create_record(request: Request, zone_id: str, body: RecordUpsert) -> dict:
+    """Create a new rrset. Fails with 409 if one already exists for that name/type."""
     client = _client(request)
     rrset = _to_rrset(zone_id, body, "REPLACE")
     _ensure_apex_ns_mutable(request, zone_id, rrset["name"], rrset["type"])
@@ -122,6 +128,7 @@ async def create_record(request: Request, zone_id: str, body: RecordUpsert) -> d
 
 @router.put("/zones/{zone_id}/records", dependencies=[Depends(require_auth)])
 async def upsert_record(request: Request, zone_id: str, body: RecordUpsert) -> dict:
+    """Create or fully replace an rrset for the given name/type."""
     rrset = _to_rrset(zone_id, body, "REPLACE")
     _ensure_apex_ns_mutable(request, zone_id, rrset["name"], rrset["type"])
     await _client(request).patch_rrsets(zone_id, [rrset])
@@ -135,6 +142,7 @@ async def delete_record(
     name: str = Query(default=""),
     type: RecordType = Query(),
 ) -> None:
+    """Delete the rrset matching the given name and type."""
     fqdn = canonicalize(name, zone_id)
     _ensure_apex_ns_mutable(request, zone_id, fqdn, type.value)
     rrset = {

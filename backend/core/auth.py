@@ -23,6 +23,8 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 class Claims(BaseModel):
+    """The subset of the verified JWT's claims this app actually needs."""
+
     sub: str
     preferred_username: str
 
@@ -71,6 +73,8 @@ async def require_auth(
     request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> Claims:
+    """FastAPI dependency guarding mutating endpoints: verifies the bearer token's
+    signature, issuer, and audience against the configured Keycloak realm."""
     settings = request.app.state.settings
     if not (settings.oidc_issuer and settings.oidc_jwks_url and settings.oidc_audience):
         raise PolicyError(503, "Authentication is not configured", code="auth_not_configured")
