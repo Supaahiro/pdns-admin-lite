@@ -9,7 +9,7 @@ Patterns this codebase expects new backend code to follow. See the root [README.
 
 ## Auth
 
-- `GET` endpoints stay anonymous by design — matches what an open AXFR would already leak. Only mutating endpoints (`POST`/`PUT`/`DELETE` on zones/records) sit behind `Depends(require_auth)`.
+- Zone/record data sits behind `Depends(require_auth)` for every verb, `GET` included (`list_zones`, `get_zone`), not just mutations — the interactive Scalar docs (`/api/scalar`) make anonymous browsing trivially discoverable, so read access is no longer left open. `GET /health` is the one deliberate exception: it's a liveness probe (Docker healthcheck calls it with no credentials) that reveals no DNS data.
 - Auth fails closed: OIDC settings unset on the backend → `503 auth_not_configured`, never silently open.
 - JWKS fetching goes through `JwksCache` (`core/auth.py`, httpx-based), not PyJWT's bundled `PyJWKClient` — that one fetches via `urllib`, which is invisible to `respx` in tests and blocks the event loop inside an async dependency.
 
@@ -30,6 +30,12 @@ Patterns this codebase expects new backend code to follow. See the root [README.
 | Edit/delete the apex `NS` rrset | 403 (rewriting it is functionally zone destruction) | allowed (a subzone's own apex NS is a normal delegation record) | allowed |
 
 Creating the *parent* of a protected zone is allowed: on the same authoritative server, queries for the child resolve against the more specific zone, so a parent can never shadow it.
+
+## API docs
+
+- Interactive docs (Scalar) live at `/api/scalar`, backed by `/api/openapi.json` — both replace FastAPI's default `/docs`/`/redoc`/`/openapi.json` (disabled via `FastAPI(openapi_url=None, docs_url=None, redoc_url=None)` in `main.py`) and both are gated dev-only by `_require_development` (`api/routes.py`), which reads `ENVIRONMENT` live at request time — same convention as `/health` — so no rebuild/restart is needed to flip them off.
+- Endpoint/model docstrings are not just internal comments here: FastAPI surfaces them as the OpenAPI operation/schema descriptions Scalar renders. Add one to any new endpoint or response model, written for an API consumer reading generated docs, not a code reviewer.
+- Scalar's "Authorize" button is prefilled for Keycloak OAuth2 (Authorization Code + PKCE), reusing the same public SPA client the frontend logs in with (`Settings.oidc_client_id`, `vendors/keycloak/realm-export.json`) — no separate Keycloak client for docs-only use.
 
 ## Testing
 

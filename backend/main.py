@@ -46,7 +46,13 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         await app.state.http.aclose()
         await app.state.oidc_http.aclose()
 
-    app = FastAPI(title="pdns-admin-lite", lifespan=lifespan)
+    # The default /docs, /redoc, /openapi.json are replaced by our own
+    # /api/scalar and /api/openapi.json (see api/routes.py), which gate
+    # themselves to ENVIRONMENT=DEVELOPMENT and sit behind the /api prefix so
+    # the Caddy edge (which only proxies /api/*) can reach them.
+    app = FastAPI(
+        title="pdns-admin-lite", lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None
+    )
     app.state.settings = settings
 
     if settings.cors_origins:
