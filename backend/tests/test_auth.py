@@ -10,10 +10,16 @@ def _put_record(client, headers: dict | None = None):
     return client.put("/api/zones/example.test./records", json=UPSERT_BODY, headers=headers)
 
 
-def test_get_zones_succeeds_with_no_auth_header(client, pdns_mock) -> None:
-    """Reads stay anonymous even with auth configured."""
-    pdns_mock.get(ZONES_PATH).respond(200, json=[])
+def test_get_zones_without_header_is_401(client, pdns_mock) -> None:
+    """Reads require auth too, same as mutations — not just POST/PUT/DELETE."""
     response = client.get("/api/zones")
+    assert response.status_code == 401
+    assert response.json()["code"] == "not_authenticated"
+
+
+def test_get_zones_with_valid_token_succeeds(client, pdns_mock) -> None:
+    pdns_mock.get(ZONES_PATH).respond(200, json=[])
+    response = client.get("/api/zones", headers=auth_headers())
     assert response.status_code == 200
 
 

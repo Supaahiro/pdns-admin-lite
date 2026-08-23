@@ -23,6 +23,8 @@ _LDH_ZONE_RE = re.compile(r"([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+")
 
 
 class PdnsError(Exception):
+    """An error that reached PowerDNS (see module docstring for the status mapping)."""
+
     def __init__(self, status_code: int, detail: str, code: str = "pdns_error") -> None:
         super().__init__(detail)
         self.status_code = status_code
@@ -129,14 +131,17 @@ class PdnsClient:
         self._base = f"/servers/{server_id}"
 
     async def list_zones(self) -> list[dict]:
+        """GET the full zone list. PowerDNS has no pagination for this call."""
         resp = await self._request("GET", f"{self._base}/zones")
         return resp.json()
 
     async def get_zone(self, zone_id: str) -> dict:
+        """GET a zone with all of its rrsets in one response."""
         resp = await self._request("GET", f"{self._base}/zones/{zone_id}")
         return resp.json()
 
     async def patch_rrsets(self, zone_id: str, rrsets: list[dict]) -> None:
+        """PATCH one or more rrsets in place (REPLACE or DELETE changetype each)."""
         await self._request(
             "PATCH",
             f"{self._base}/zones/{zone_id}",
@@ -144,6 +149,7 @@ class PdnsClient:
         )
 
     async def create_zone(self, name: str, nameservers: list[str]) -> dict:
+        """POST a new zone; re-tags PowerDNS's 409 as code=zone_exists."""
         try:
             resp = await self._request(
                 "POST",
@@ -162,6 +168,7 @@ class PdnsClient:
         return resp.json()
 
     async def delete_zone(self, zone_id: str) -> None:
+        """DELETE a zone; re-tags PowerDNS's 404 as code=zone_not_found."""
         try:
             await self._request("DELETE", f"{self._base}/zones/{zone_id}")
         except PdnsError as exc:
@@ -170,6 +177,7 @@ class PdnsClient:
             raise
 
     async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        """Shared request path: maps transport failures and error statuses to PdnsError."""
         try:
             resp = await self._http.request(method, path, **kwargs)
         except httpx.TransportError as exc:
@@ -183,6 +191,7 @@ class PdnsClient:
 
     @staticmethod
     def _error_detail(resp: httpx.Response) -> str:
+        """Best-effort extraction of PowerDNS's own error message from the response body."""
         try:
             detail = resp.json().get("error")
         except ValueError:

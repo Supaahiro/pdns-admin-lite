@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     oidc_issuer: str = ""
     oidc_jwks_url: str = ""
     oidc_audience: str = ""
+    # Public SPA client (see vendors/keycloak/realm-export.json), reused to
+    # prefill the Scalar docs' OAuth2/PKCE login — not used for JWT
+    # verification, only for the dev-docs "Authorize" button.
+    oidc_client_id: str = "pdns-admin-lite-spa"
 
     # Comma-separated zone names, canonicalized at load time. Never
     # deletable/zone-modifiable regardless of who is authenticated. NoDecode:

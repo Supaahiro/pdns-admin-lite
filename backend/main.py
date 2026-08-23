@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_app(settings: Settings | None = None) -> FastAPI:
+    """Construct the FastAPI app: lifespan-managed HTTP clients, CORS, error
+    handlers, and the API router. Takes an explicit Settings so tests can
+    build isolated apps without touching the process environment."""
     # Called here, not at module level, so importing main.py still performs
     # no I/O on its own — only running the app (or a test building one) does.
     setup_logging()
@@ -43,7 +46,13 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         await app.state.http.aclose()
         await app.state.oidc_http.aclose()
 
-    app = FastAPI(title="pdns-admin-lite", lifespan=lifespan)
+    # The default /docs, /redoc, /openapi.json are replaced by our own
+    # /api/scalar and /api/openapi.json (see api/routes.py), which gate
+    # themselves to ENVIRONMENT=DEVELOPMENT and sit behind the /api prefix so
+    # the Caddy edge (which only proxies /api/*) can reach them.
+    app = FastAPI(
+        title="pdns-admin-lite", lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None
+    )
     app.state.settings = settings
 
     if settings.cors_origins:

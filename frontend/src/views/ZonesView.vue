@@ -5,12 +5,18 @@ import { useRouter } from "vue-router";
 import { createZone, formatError, getZones } from "../api/client";
 import type { ZoneSummary } from "../api/types";
 import { useAuth } from "../auth";
+import Paginator from "../components/Paginator.vue";
 
 const router = useRouter();
 const { isAuthenticated } = useAuth();
 
 const zones = ref<ZoneSummary[]>([]);
 const loading = ref(true);
+const page = ref(1);
+const pageSize = ref(10);
+const pagedZones = computed(() =>
+  zones.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value),
+);
 // Page-level, dismissible: distinct from createError below (field-adjacent).
 const pageError = ref("");
 
@@ -34,6 +40,7 @@ const nameHint = computed(() => {
 async function load(): Promise<void> {
   loading.value = true;
   pageError.value = "";
+  page.value = 1;
   try {
     zones.value = await getZones();
   } catch (err) {
@@ -99,30 +106,33 @@ async function submitCreate(): Promise<void> {
     <button class="dismiss" aria-label="Dismiss" @click="pageError = ''">×</button>
   </div>
   <p v-else-if="zones.length === 0" class="muted">No zones found.</p>
-  <table v-else>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Kind</th>
-        <th>Serial</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="zone in zones" :key="zone.id">
-        <td>
-          <RouterLink :to="{ name: 'zone-detail', params: { zoneId: zone.id } }">
-            {{ zone.name }}
-          </RouterLink>
-        </td>
-        <td>{{ zone.kind }}</td>
-        <td>{{ zone.serial }}</td>
-        <td>
-          <span v-if="zone.protected" class="tag protected" title="Protected — see PROTECTED_ZONES">
-            🛡 protected
-          </span>
-        </td>
-      </tr>
-    </tbody>
-  </table>
+  <template v-else>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Kind</th>
+          <th>Serial</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="zone in pagedZones" :key="zone.id">
+          <td>
+            <RouterLink :to="{ name: 'zone-detail', params: { zoneId: zone.id } }">
+              {{ zone.name }}
+            </RouterLink>
+          </td>
+          <td>{{ zone.kind }}</td>
+          <td>{{ zone.serial }}</td>
+          <td>
+            <span v-if="zone.protected" class="tag protected" title="Protected — see PROTECTED_ZONES">
+              🛡 protected
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <Paginator v-model:page="page" v-model:page-size="pageSize" :total="zones.length" />
+  </template>
 </template>
