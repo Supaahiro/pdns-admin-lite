@@ -1,67 +1,101 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Working with the project owner
 
-## Project Overview
+Implementation and architectural decisions belong to the user. When the user
+makes a choice, follow it: do not challenge it, reopen the discussion, or replace
+it with a solution you prefer. If a concrete technical obstacle arises, describe
+it with supporting evidence and ask only for the clarification needed to proceed.
+A different preference is not an obstacle.
 
-A minimal web UI for managing DNS records on a PowerDNS Authoritative server: a FastAPI backend acting as a thin adapter over the PowerDNS REST API, and a Vue 3 + Vite frontend served by nginx, wired together behind a Caddy edge proxy with docker-compose. See [README.md](README.md) for the full feature set, architecture diagram, and how to run the stack.
+Do not independently introduce new rules, prohibitions, or permanent constraints
+for the project. Your choices during a task do not become the user's decisions.
+This file describes the project and helps readers navigate the code; it is not a
+record of prescriptions accumulated from previous sessions.
 
-## Repository Structure
+Do not modify this document without the user's explicit consent.
 
-- `backend/` — FastAPI app (Poetry, Python 3.13): `core/pdns.py` PowerDNS client, `core/auth.py` JWT/JWKS verification, `api/routes.py` endpoints, `tests/`. See [backend/CONVENTIONS.md](backend/CONVENTIONS.md).
-- `frontend/` — Vue 3 + Vite + TypeScript SPA, multi-stage Dockerfile ending in `nginx:alpine`. See [frontend/CONVENTIONS.md](frontend/CONVENTIONS.md).
-- `vendors/pdns/` — Demo PowerDNS seeder (`seed.sh`).
-- `vendors/keycloak/` — Checked-in dev-mode Keycloak realm export.
-- `.github/` — CI/CD workflows, composite actions, and scripts. See [.github/CLAUDE.md](.github/CLAUDE.md).
-- `docker-compose.yml` / `Caddyfile` — dev stack (edge, frontend, backend, demo PowerDNS, Keycloak).
+## What pdns-admin-lite is
 
-## Build & Development Commands
+A web interface for managing DNS records on a PowerDNS Authoritative server.
+The backend is a Python 3.13 FastAPI adapter over the PowerDNS REST API, with
+JWT/JWKS authentication. The frontend uses Vue 3, TypeScript, and Vite.
 
-### Backend (`cd backend`)
+Docker Compose runs the backend, the frontend served by nginx, a Caddy edge proxy,
+and development instances of PowerDNS and Keycloak.
+
+## Where the code lives
+
+| Path | Contents |
+|---|---|
+| `backend/` | FastAPI application, Poetry dependencies, and tests |
+| `backend/core/pdns.py`, `backend/core/auth.py` | PowerDNS client and JWT/JWKS verification |
+| `backend/api/routes.py` | HTTP endpoints |
+| `frontend/` | Vue application, Vite configuration, and frontend Dockerfile |
+| `vendors/pdns/`, `vendors/keycloak/` | Demo DNS seeder and development Keycloak realm |
+| `docker-compose.yml`, `Caddyfile` | Local stack and edge routing |
+| `.github/` | PR validation, release workflows, actions, and scripts |
+
+## Build and tests
+
+Run checks for the component affected by a change. Backend tests use pytest and
+mock PowerDNS with respx; running the application itself requires a reachable
+`PDNS_API_URL`. The frontend build runs TypeScript checks through `vue-tsc`
+before producing the Vite bundle; there is no frontend test script.
+
+PR validation runs backend tests, the frontend build, YAML lint, and Docker build
+checks according to changed paths. The workflow is
+`.github/workflows/pr-validate.yml`; CI details are in `.github/CLAUDE.md`.
+Repeat checks after relevant changes or to investigate a failure.
+
+## Essential commands
+
+From `backend/`:
+
 ```bash
 poetry install
-poetry run pytest -v                 # unit tests, PowerDNS mocked with respx
-poetry run uvicorn main:app --reload # http://localhost:8000, needs a reachable PDNS_API_URL
+poetry run pytest -v
+poetry run uvicorn main:app --reload
 ```
 
-### Frontend (`cd frontend`)
+From `frontend/`:
+
 ```bash
 npm install
-npm run dev     # http://localhost:5173, proxies /api to http://localhost:8000
-npm run build   # type-check (vue-tsc) + production bundle
+npm run dev
+npm run build
 ```
 
-### Full stack
+From the repository root, to configure and start the local stack:
+
 ```bash
 cp .env.example .env
-docker compose up --build   # http://localhost:8080
+docker compose up --build
 ```
 
-### Root (repo tooling)
+The stack is served at `http://localhost:8080`. The standalone frontend dev server
+uses port 5173 and proxies API requests to the backend on port 8000.
+
+For repository tooling, from the root:
+
 ```bash
-npm install           # installs commitlint + husky (git hooks)
-pip install yamllint   # required for the yamllint pre-commit hook
+npm install
+pip install yamllint
+yamllint -c .yamllint.yml .
 ```
 
-## Commit Convention
+Commits follow `<type>(<scope>): <Subject>`, enforced by commitlint and Husky.
+The optional scope is lowercase; the subject is sentence-case, at most 72
+characters, without a trailing period. Body and footer lines are at most 100
+characters. See `.commitlintrc.yml` for the accepted types.
 
-Enforced by commitlint via a Husky `commit-msg` hook. Format: `<type>(<scope>): <Subject>`
+The repository uses Gitflow and GitVersion; `GitVersion.yml` defines branch
+sources and version increments. Stable releases come from `master`;
+`chore/*` branches from `master` bypass publishing. Manual releases from
+`hotfix/*` are stable, while other eligible branches produce prereleases.
+`.github/workflows/release.yml` delegates image publishing to
+`.github/workflows/_build-and-release.yml`.
 
-- **Types:** feat, fix, hotfix, release, refactor, perf, test, docs, chore, ci, build, revert
-- **Scope:** optional, lowercase
-- **Subject:** sentence-case, max 72 chars, no trailing period
-- **Body/footer:** max 100 chars per line
-
-## Git Branching (GitFlow)
-
-Semantic versioning via GitVersion (ContinuousDeployment mode, see `GitVersion.yml`):
-- `master` — stable releases (patch increment)
-- `develop` — pre-releases (minor increment)
-- `feature/*`, `fix/*`, `perf/*`, `refactor/*`, `docs/*`, `style/*`, `test/*`, `ci/*` — from `develop`
-- `release/*` — release candidates, from `develop` into `master`
-- `hotfix/*` — from `master`
-- `chore/*` — from `master`, bypasses the release cycle
-
-## CI/CD
-
-`release.yml` triggers on push to `master` (always a stable release — except `chore/*` master-bypass merges, which are skipped) and on `workflow_dispatch` (`hotfix/*` → stable release from the branch; any other branch, e.g. `develop` → pre-release on demand; refused on `master` and on an already release-tagged HEAD). Its `compute` job gates publishing via `compute-publish-condition.sh`, then delegates to the reusable `_build-and-release.yml`, which builds and pushes versioned, OCI-labeled images to GHCR (`pdns-admin-lite-backend`, `pdns-admin-lite-frontend`) and cuts a GitHub Release on stable builds. `pr-validate.yml` runs on every PR into `develop`/`master`: backend tests, frontend build, YAML lint, and a push:false Docker build check for whichever Dockerfile changed. Full conventions in [.github/CLAUDE.md](.github/CLAUDE.md).
+The overview and stack setup are in `README.md`. Code conventions are in
+`backend/CONVENTIONS.md` and `frontend/CONVENTIONS.md`; workflow guidance is
+in `.github/CLAUDE.md`.
