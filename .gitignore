@@ -17,6 +17,7 @@ frontend/*.tsbuildinfo
 .vscode
 .DS_Store
 .claude/
+.agents/
 
 # Local scratch stacks (e.g. external-Keycloak testing) — throwaway, not for the repo
 playgrounds/

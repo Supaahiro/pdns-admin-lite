@@ -15,10 +15,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: resolve(__dirname, "index.html"),
+        main: resolve(import.meta.dirname, "index.html"),
         // Separate entry so the silent-renew iframe (see src/silent-renew.ts)
         // loads a minimal script instead of bootstrapping the whole SPA.
-        "silent-renew": resolve(__dirname, "silent-renew.html"),
+        "silent-renew": resolve(import.meta.dirname, "silent-renew.html"),
       },
     },
   },

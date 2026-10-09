@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Working with the project owner
 
@@ -14,6 +14,14 @@ This file describes the project and helps readers navigate the code; it is not a
 record of prescriptions accumulated from previous sessions.
 
 Do not modify this document without the user's explicit consent.
+
+## Codex's role
+
+The default focus is planning and review: analyse the code, prepare work plans,
+and verify changes, reporting concrete problems with evidence. Development,
+including fixes that emerge during a review, happens only at the user's explicit
+request. A request for an analysis, a plan, or a review does not authorise
+implementing the changes.
 
 ## What pdns-admin-lite is
 

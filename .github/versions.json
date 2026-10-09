@@ -9,7 +9,8 @@
   ],
   "toolchain": {
     "node": "24",
-    "python": "3.13"
+    "python": "3.12",
+    "uv": "0.12.24"
   },
   "branchOverrides": {}
 }

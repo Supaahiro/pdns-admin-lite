@@ -37,6 +37,7 @@ All `uses:` references must match this table (pins adopted from `blog`, 2026-07-
 | `actions/checkout` | `@v7` |
 | `actions/setup-node` | `@v7` |
 | `actions/setup-python` | `@v6` |
+| `astral-sh/setup-uv` | `@v9.0.0` |
 | `dorny/paths-filter` | `@v4` |
 | `docker/login-action` | `@v4` |
 | `docker/setup-buildx-action` | `@v4` |
@@ -55,13 +56,12 @@ an output. **Prerequisite:** caller must `actions/checkout` first.
 **Inputs:** `branch` (optional) — override key to apply; defaults to the PR
 target branch (`GITHUB_BASE_REF`), else the pushed branch (`GITHUB_REF_NAME`).
 
-**Outputs:** `node`, `python` — trimmed from blog's node/python/dotnet/zensical
-superset to the two tools this repo actually uses.
+**Outputs:** `node`, `python`, `uv` — the tools used to build and test this repo.
 
 Use it as the first step after checkout, then reference
 `${{ steps.toolchain.outputs.<tool> }}` in `setup-*` steps. This is the
 single source of truth for tool versions — never hardcode
-`node-version`/`python-version` in a workflow.
+`node-version`/`python-version` or the uv version in a workflow.
 
 **Per-branch override:** add the target version under `branchOverrides.<branch>`
 in `versions.json` to trial a tool on one branch (e.g. `develop`) before
@@ -129,13 +129,17 @@ required checks never hang on 'Expected'). `dorny/paths-filter` gates the
 `backend`/`frontend` jobs per changed path; `changes-and-lint` runs YAML lint
 unconditionally cheap and reports filter outputs for the other jobs to consume.
 
-Imported from schwifty-lab's `pr-validate-pdns-admin-lite.yml` (backend
-`poetry install && pytest`, frontend `npm ci && npm run build`), with paths
+Imported from schwifty-lab's `pr-validate-pdns-admin-lite.yml`, with paths
 collapsed from `projects/pdns-admin-lite/{backend,frontend}` to `backend/`
 and `frontend/` now that this project is its own repo, and restructured onto
 the blog paths-filter/toolchain pattern.
 
-The `docker` job builds (never pushes) whichever image's Dockerfile changed,
+Backend validation uses `uv sync --locked` and `uv run --locked pytest -v` on
+Python 3.12, the minimum supported version. `astral-sh/setup-uv` installs the
+toolchain's uv version and caches dependencies using `backend/uv.lock`.
+Frontend validation uses `npm ci && npm run build` on Node 24.
+
+The `docker` job builds (never pushes) whichever image's Dockerfile or dependency files changed,
 reusing the release build's `type=gha` cache read-only (`cache-from` only) —
 catches a broken Dockerfile before release time, when a push that doesn't
 publish would otherwise build nothing.

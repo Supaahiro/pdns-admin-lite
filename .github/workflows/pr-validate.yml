@@ -1,7 +1,9 @@
 # .github/workflows/pr-validate.yml
-# Version: 1.1.0 (2026-07-18)
+# Version: 1.2.1 (2026-10-09)
 #
 # Changelog:
+#   1.2.1 - Pin setup-uv to its published v9.0.0 tag (no v9 alias exists).
+#   1.2.0 - Use uv with a locked install; check Docker builds on dependency changes.
 #   1.1.0 - New docker job: builds — without pushing — whichever image's
 #           Dockerfile the PR changes, reusing the release build's gha cache
 #           read-only. Closes the gap where a broken Dockerfile only surfaced
@@ -66,9 +68,13 @@ jobs:
             docker_backend:
               - 'backend/Dockerfile'
               - 'backend/.dockerignore'
+              - 'backend/pyproject.toml'
+              - 'backend/uv.lock'
             docker_frontend:
               - 'frontend/Dockerfile'
               - 'frontend/.dockerignore'
+              - 'frontend/package.json'
+              - 'frontend/package-lock.json'
             yaml:
               - '**/*.yaml'
               - '**/*.yml'
@@ -110,16 +116,20 @@ jobs:
         with:
           python-version: ${{ steps.toolchain.outputs.python }}
 
-      - name: Install Poetry
-        run: pip install poetry
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: ${{ steps.toolchain.outputs.uv }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install dependencies
         working-directory: backend
-        run: poetry install
+        run: uv sync --locked
 
       - name: Run tests
         working-directory: backend
-        run: poetry run pytest -v
+        run: uv run --locked pytest -v
 
   # ── Frontend ────────────────────────────────────────────────────────────────
   frontend:
@@ -149,7 +159,7 @@ jobs:
         run: npm run build
 
   # ── Docker build check ──────────────────────────────────────────────────────
-  # Builds (push: false) whichever image's Dockerfile the PR touches. Without
+  # Builds (push: false) images whose Dockerfile or dependencies the PR touches. Without
   # this, a broken Dockerfile only surfaces at release time: pushes that don't
   # publish build nothing. Reuses the release build's gha cache read-only
   # (cache-from only, no cache-to), so PRs never pollute it; on a cache miss

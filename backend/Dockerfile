@@ -1,7 +1,8 @@
 # backend/Dockerfile
-# Version: 1.2.1 (2026-07-19)
+# Version: 1.3.0 (2026-10-09)
 #
 # Changelog:
+#   1.3.0 - Install locked runtime dependencies with uv on Python 3.12.
 #   1.2.1 - No functional change. Touches this file only so backend/ falls
 #           inside release.yml's paths filter (backend/**, frontend/**) for
 #           the release/0.1.0 → master cut, since the actual fix on this
@@ -18,17 +19,18 @@
 #           running container's version is inspectable without a registry tag.
 #   1.0.0 - Baseline: single-stage image, Poetry main deps only.
 
-FROM python:3.13-slim
+FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.12.24 /uv /bin/uv
 
 ENV PYTHONUNBUFFERED=1 \
-    POETRY_VIRTUALENVS_CREATE=false
+    UV_PYTHON_DOWNLOADS=never \
+    PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir poetry
-
-COPY pyproject.toml poetry.lock ./
-RUN poetry install --only main --no-root --no-interaction
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-cache
 
 COPY main.py ./
 COPY core/ core/
