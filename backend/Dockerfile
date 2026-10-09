@@ -3,6 +3,10 @@
 #
 # Changelog:
 #   1.3.0 - Install locked runtime dependencies with uv on Python 3.12.
+#   1.2.1 - No functional change. Touches this file only so backend/ falls
+#           inside release.yml's paths filter (backend/**, frontend/**) for
+#           the release/0.1.0 → master cut, since the actual fix on this
+#           release (ci/fix-script-executable-bit) only touched .github/.
 #   1.2.0 - Add ENVIRONMENT (default DEVELOPMENT), surfaced in GET
 #           /api/health alongside version. Unlike APP_VERSION, this is meant
 #           to be overridden without a rebuild (`docker run -e
