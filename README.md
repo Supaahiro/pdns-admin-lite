@@ -120,7 +120,7 @@ When using an external Keycloak, disable the bundled `keycloak` service.
 - Docker Engine with Docker Compose v2
 
 For local development:
-- Python ≥ 3.13 with [Poetry](https://python-poetry.org/)
+- Python ≥ 3.12 with [uv](https://docs.astral.sh/uv/)
 - Node.js ≥ 24
 
 ## Quick Setup
@@ -197,10 +197,28 @@ Backend:
 
 ```bash
 cd backend
-poetry install
-poetry run pytest -v
-poetry run uvicorn main:app --reload
+uv sync --locked
+uv run --locked pytest -v
+uv run --locked uvicorn main:app --reload
 ```
+
+`uv sync` creates `backend/.venv` and installs runtime and development
+dependencies from `uv.lock`.
+
+To use an existing Conda environment instead, explicitly select it. For example,
+in PowerShell, from `backend/`:
+
+```powershell
+conda activate pdnsadmin-lite
+$env:UV_PROJECT_ENVIRONMENT = $env:CONDA_PREFIX
+uv sync --locked --inexact
+uv run --locked --inexact pytest -v
+uv run --locked --inexact uvicorn main:app --reload
+```
+
+Keep `--inexact` on both `sync` and `run` when sharing a Conda environment: it
+preserves packages that are not listed in `uv.lock`. Remove the override with
+`Remove-Item Env:UV_PROJECT_ENVIRONMENT` to return to the project `.venv`.
 
 The API is available at `http://localhost:8000` and requires a reachable PowerDNS API endpoint.
 
@@ -208,7 +226,7 @@ Frontend:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev     # http://localhost:5173
 npm run build   # type-check (vue-tsc) + production bundle
 ```
@@ -218,6 +236,37 @@ The Vite dev server proxies `/api` requests to the backend, so no CORS configura
 Tip: `docker compose up pdns pdns-seed` starts a disposable seeded PowerDNS instance for local development. Add `ports: ["8081:8081"]` to the `pdns` service if you need host access.
 
 See [backend/CONVENTIONS.md](backend/CONVENTIONS.md) and [frontend/CONVENTIONS.md](frontend/CONVENTIONS.md) for backend and frontend development conventions.
+
+### Updating dependencies
+
+From `backend/`, inspect and update the lockfile within the declared version ranges:
+
+```bash
+uv tree --outdated --depth 1
+uv lock --upgrade
+uv sync --locked
+uv run --locked pytest -v
+```
+
+When using Conda, keep the environment override and add `--inexact` to `sync`
+and `run` as above. To adopt a release outside the declared ranges, update
+`pyproject.toml` before regenerating the lockfile.
+
+From `frontend/`:
+
+```bash
+npm outdated
+npm update
+npm run build
+npm audit
+```
+
+TypeScript uses the 6.0 release line because `vue-tsc` currently relies on the
+JavaScript compiler API. The Node.js type definitions follow Node 24, the runtime
+used by CI and the frontend Docker build.
+
+Commit the manifests together with `backend/uv.lock` and the relevant
+`package-lock.json`. Dependabot checks backend and frontend dependencies weekly.
 
 ## REST API
 
