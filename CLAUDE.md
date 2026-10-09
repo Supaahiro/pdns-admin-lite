@@ -18,7 +18,7 @@ Do not modify this document without the user's explicit consent.
 ## What pdns-admin-lite is
 
 A web interface for managing DNS records on a PowerDNS Authoritative server.
-The backend is a Python 3.13 FastAPI adapter over the PowerDNS REST API, with
+The backend is a Python 3.12+ FastAPI adapter over the PowerDNS REST API, with
 JWT/JWKS authentication. The frontend uses Vue 3, TypeScript, and Vite.
 
 Docker Compose runs the backend, the frontend served by nginx, a Caddy edge proxy,
@@ -28,7 +28,7 @@ and development instances of PowerDNS and Keycloak.
 
 | Path | Contents |
 |---|---|
-| `backend/` | FastAPI application, Poetry dependencies, and tests |
+| `backend/` | FastAPI application, uv dependencies, and tests |
 | `backend/core/pdns.py`, `backend/core/auth.py` | PowerDNS client and JWT/JWKS verification |
 | `backend/api/routes.py` | HTTP endpoints |
 | `frontend/` | Vue application, Vite configuration, and frontend Dockerfile |
@@ -53,10 +53,13 @@ Repeat checks after relevant changes or to investigate a failure.
 From `backend/`:
 
 ```bash
-poetry install
-poetry run pytest -v
-poetry run uvicorn main:app --reload
+uv sync --locked
+uv run --locked pytest -v
+uv run --locked uvicorn main:app --reload
 ```
+
+For an existing Conda environment, see the `UV_PROJECT_ENVIRONMENT` and
+`--inexact` instructions in `README.md`.
 
 From `frontend/`:
 
@@ -86,7 +89,7 @@ yamllint -c .yamllint.yml .
 
 Commits follow `<type>(<scope>): <Subject>`, enforced by commitlint and Husky.
 The optional scope is lowercase; the subject is sentence-case, at most 72
-characters, without a trailing period. Body and footer lines are at most 100
+characters, without a trailing period. Body and footer lines are at most 250
 characters. See `.commitlintrc.yml` for the accepted types.
 
 The repository uses Gitflow and GitVersion; `GitVersion.yml` defines branch

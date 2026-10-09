@@ -1,11 +1,11 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /backend
     schedule:
       interval: weekly
     groups:
-      pip:
+      backend:
         patterns: ["*"]
     target-branch: "develop"
     ignore:
