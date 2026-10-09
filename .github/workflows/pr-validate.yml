@@ -1,7 +1,8 @@
 # .github/workflows/pr-validate.yml
-# Version: 1.2.0 (2026-10-09)
+# Version: 1.2.1 (2026-10-09)
 #
 # Changelog:
+#   1.2.1 - Pin setup-uv to its published v9.0.0 tag (no v9 alias exists).
 #   1.2.0 - Use uv with a locked install; check Docker builds on dependency changes.
 #   1.1.0 - New docker job: builds — without pushing — whichever image's
 #           Dockerfile the PR changes, reusing the release build's gha cache
@@ -116,7 +117,7 @@ jobs:
           python-version: ${{ steps.toolchain.outputs.python }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           version: ${{ steps.toolchain.outputs.uv }}
           enable-cache: true

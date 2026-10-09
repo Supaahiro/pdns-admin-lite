@@ -37,7 +37,7 @@ All `uses:` references must match this table (pins adopted from `blog`, 2026-07-
 | `actions/checkout` | `@v7` |
 | `actions/setup-node` | `@v7` |
 | `actions/setup-python` | `@v6` |
-| `astral-sh/setup-uv` | `@v9` |
+| `astral-sh/setup-uv` | `@v9.0.0` |
 | `dorny/paths-filter` | `@v4` |
 | `docker/login-action` | `@v4` |
 | `docker/setup-buildx-action` | `@v4` |
