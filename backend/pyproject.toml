@@ -9,7 +9,7 @@ license = {text = "**No-Commercial License** (see LICENSE file)"}
 requires-python = ">=3.12,<4.0.0"
 
 dependencies = [
-    "fastapi>=0.143.0,<0.144",
+    "fastapi>=0.143.0,<0.157",
     "uvicorn[standard]>=0.54.0,<0.55",
     "httpx>=0.28.1,<0.29",
     "pydantic-settings>=2.15.0,<3",
